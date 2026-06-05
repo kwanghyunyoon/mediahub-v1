@@ -36,6 +36,7 @@ class ProfileCreate(BaseModel):
     color: str
     icon: str = Field(min_length=1, max_length=40)
     sections: List[str] = Field(default_factory=list)
+    theme: str = Field(default="default", max_length=30)
 
     @field_validator('passcode')
     @classmethod
@@ -64,6 +65,7 @@ class ProfileUpdate(BaseModel):
     color: Optional[str] = None
     icon: Optional[str] = Field(default=None, min_length=1, max_length=40)
     sections: Optional[List[str]] = None
+    theme: Optional[str] = Field(default=None, max_length=30)
 
     @field_validator('passcode')
     @classmethod
@@ -111,6 +113,7 @@ class ProfilePublic(BaseModel):
     color: str
     icon: str
     sections: List[str]
+    theme: str = "default"
 
 
 class PasscodeVerify(BaseModel):
@@ -167,6 +170,7 @@ def _to_public(doc: dict) -> dict:
         "color": doc["color"],
         "icon": doc["icon"],
         "sections": doc.get("sections", []),
+        "theme": doc.get("theme", "default"),
     }
 
 
@@ -177,6 +181,7 @@ def _to_admin(doc: dict) -> dict:
         "color": doc["color"],
         "icon": doc["icon"],
         "sections": doc.get("sections", []),
+        "theme": doc.get("theme", "default"),
         "passcode": doc["passcode"],
         "createdAt": doc.get("createdAt"),
         "updatedAt": doc.get("updatedAt"),
@@ -261,6 +266,7 @@ async def create_profile(
         "color": body.color,
         "icon": body.icon,
         "sections": body.sections,
+        "theme": body.theme,
         "createdAt": now,
         "updatedAt": now,
     }
@@ -363,6 +369,99 @@ async def delete_media(profile_id: str, media_id: str):
 
 
 app.include_router(api_router)
+
+# ---------- Seed example profile (Westwood Ranch) ----------
+WESTERN_NAME = "Westwood Ranch"
+
+
+async def _seed_westwood_ranch() -> None:
+    """Create a richly themed example profile if it doesn't already exist."""
+    existing = await db.profiles.find_one(
+        {"name": WESTERN_NAME, "theme": "western"}, {"_id": 0, "id": 1}
+    )
+    if existing:
+        return
+
+    now = _now_iso()
+    pid = str(uuid.uuid4())
+    await db.profiles.insert_one({
+        "id": pid,
+        "name": WESTERN_NAME,
+        "passcode": "1976",
+        "color": "#C2410C",  # burnt orange
+        "icon": "Crown",
+        "sections": ["Best Moments", "Classic Scenes", "Hidden Gems"],
+        "theme": "western",
+        "createdAt": now,
+        "updatedAt": now,
+    })
+
+    # Placeholder media: a mix of direct (Google public sample MP4s, always
+    # reachable) and embed (YouTube watch links). The cards exist to showcase
+    # layout; their actual playback is incidental.
+    GOOG = "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample"
+    YT = "https://www.youtube.com/watch?v="
+
+    items = [
+        # Best Moments
+        ("Showdown at High Noon",
+         "The clock ticks, dust hangs in the air, and two riders square off in the empty street.",
+         "Best Moments", "embed", f"{YT}enuOArEfqGo"),
+        ("The Lone Rider's Last Ride",
+         "A drifter takes one final ride into the setting sun over the open plains.",
+         "Best Moments", "direct", f"{GOOG}/BigBuckBunny.mp4"),
+        ("Saloon Doors Swing Open",
+         "Boots on creaking floorboards, a hush over the room, and trouble walks in.",
+         "Best Moments", "embed", f"{YT}lqAyrJ4qmtg"),
+
+        # Classic Scenes
+        ("Sunset on Monument Valley",
+         "Mesa silhouettes burn red against an amber sky.",
+         "Classic Scenes", "direct", f"{GOOG}/ElephantsDream.mp4"),
+        ("Cattle Drive Across the Plains",
+         "Hooves, dust, and the slow patience of a long trail north.",
+         "Classic Scenes", "embed", f"{YT}ucPS_NXyXcQ"),
+        ("The Stagecoach Chase",
+         "Reins snap, wheels spin, and a six-horse team thunders across the river.",
+         "Classic Scenes", "direct", f"{GOOG}/ForBiggerBlazes.mp4"),
+
+        # Hidden Gems
+        ("Whisper of the Coyote",
+         "A moonlit ridge, a long howl, and the night listens back.",
+         "Hidden Gems", "embed", f"{YT}YV9htC1NtBE"),
+        ("Campfire Songs",
+         "A harmonica, a ring of light, and stories older than the trail.",
+         "Hidden Gems", "direct", f"{GOOG}/ForBiggerEscapes.mp4"),
+        ("The Forgotten Trail",
+         "A washed-out path winds through buttes nobody's named in a hundred years.",
+         "Hidden Gems", "embed", f"{YT}R-NhP3HQfaA"),
+    ]
+
+    docs = []
+    for title, desc, section, src_type, src_url in items:
+        docs.append({
+            "id": str(uuid.uuid4()),
+            "profileId": pid,
+            "title": title,
+            "description": desc,
+            "sectionLabel": section,
+            "sourceType": src_type,
+            "sourceUrl": src_url,
+            "createdAt": now,
+            "updatedAt": now,
+        })
+    if docs:
+        await db.media.insert_many(docs)
+
+    logger.info(f"Seeded example profile '{WESTERN_NAME}' with {len(docs)} media items.")
+
+
+@app.on_event("startup")
+async def _startup_seed():
+    try:
+        await _seed_westwood_ranch()
+    except Exception as e:
+        logger.exception(f"Seed failed: {e}")
 
 app.add_middleware(
     CORSMiddleware,

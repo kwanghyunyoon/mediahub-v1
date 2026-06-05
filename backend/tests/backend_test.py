@@ -346,6 +346,137 @@ class TestMediaCRUD:
         assert r3.status_code == 404
 
 
+# ---------- Theme field (iter 4) ----------
+class TestThemeField:
+    """POST/GET/PUT honors the theme field; defaults to 'default' when omitted."""
+
+    def test_create_without_theme_defaults_to_default(self, session):
+        payload = {
+            "name": "TEST_ThemeDefault", "passcode": "4242",
+            "color": "#10b981", "icon": "Film", "sections": ["A"],
+        }
+        r = session.post(f"{API}/admin/profiles", json=payload, headers=ADMIN_HEADERS, timeout=10)
+        assert r.status_code == 200, r.text
+        data = r.json()
+        assert data.get("theme") == "default"
+        pid = data["id"]
+
+        # Public list exposes theme
+        rp = session.get(f"{API}/profiles", timeout=10)
+        assert rp.status_code == 200
+        pub = [p for p in rp.json() if p["id"] == pid]
+        assert len(pub) == 1
+        assert pub[0].get("theme") == "default"
+
+        # Verify endpoint also returns theme
+        rv = session.post(f"{API}/profiles/{pid}/verify", json={"passcode": "4242"}, timeout=10)
+        assert rv.status_code == 200
+        assert rv.json().get("theme") == "default"
+
+        session.delete(f"{API}/admin/profiles/{pid}", headers=ADMIN_HEADERS, timeout=10)
+
+    def test_create_with_theme_western(self, session):
+        payload = {
+            "name": "TEST_ThemeWestern", "passcode": "4243",
+            "color": "#C2410C", "icon": "Crown", "sections": ["X"],
+            "theme": "western",
+        }
+        r = session.post(f"{API}/admin/profiles", json=payload, headers=ADMIN_HEADERS, timeout=10)
+        assert r.status_code == 200, r.text
+        data = r.json()
+        assert data["theme"] == "western"
+        pid = data["id"]
+
+        # Public list shows theme
+        rp = session.get(f"{API}/profiles", timeout=10)
+        pub = [p for p in rp.json() if p["id"] == pid]
+        assert pub[0]["theme"] == "western"
+
+        session.delete(f"{API}/admin/profiles/{pid}", headers=ADMIN_HEADERS, timeout=10)
+
+    def test_update_theme(self, session):
+        payload = {
+            "name": "TEST_ThemeMutable", "passcode": "4244",
+            "color": "#10b981", "icon": "Film", "sections": ["A"],
+        }
+        r = session.post(f"{API}/admin/profiles", json=payload, headers=ADMIN_HEADERS, timeout=10)
+        assert r.status_code == 200
+        pid = r.json()["id"]
+        assert r.json()["theme"] == "default"
+
+        ru = session.put(
+            f"{API}/admin/profiles/{pid}",
+            json={"theme": "western"},
+            headers=ADMIN_HEADERS, timeout=10,
+        )
+        assert ru.status_code == 200
+        assert ru.json()["theme"] == "western"
+
+        # Verify persisted
+        rp = session.get(f"{API}/profiles", timeout=10)
+        pub = [p for p in rp.json() if p["id"] == pid]
+        assert pub[0]["theme"] == "western"
+
+        session.delete(f"{API}/admin/profiles/{pid}", headers=ADMIN_HEADERS, timeout=10)
+
+
+# ---------- Seed idempotency (iter 4) ----------
+class TestSeedIdempotent:
+    """Westwood Ranch is seeded exactly once and remains exactly one after reseed."""
+
+    def test_westwood_ranch_exists_with_expected_shape(self, session):
+        r = session.get(f"{API}/admin/profiles", headers=ADMIN_HEADERS, timeout=10)
+        assert r.status_code == 200
+        westwoods = [p for p in r.json() if p.get("name") == "Westwood Ranch" and p.get("theme") == "western"]
+        assert len(westwoods) == 1, f"Expected exactly 1 Westwood Ranch, found {len(westwoods)}"
+        w = westwoods[0]
+        assert w["passcode"] == "1976"
+        assert w["color"] == "#C2410C"
+        assert w["icon"] == "Crown"
+        assert w["sections"] == ["Best Moments", "Classic Scenes", "Hidden Gems"]
+
+    def test_westwood_ranch_has_9_media_items(self, session):
+        r = session.get(f"{API}/admin/profiles", headers=ADMIN_HEADERS, timeout=10)
+        westwoods = [p for p in r.json() if p.get("name") == "Westwood Ranch" and p.get("theme") == "western"]
+        pid = westwoods[0]["id"]
+        rm = session.get(f"{API}/profiles/{pid}/media", timeout=10)
+        assert rm.status_code == 200
+        items = rm.json()
+        assert len(items) == 9, f"Expected 9 seeded media items, got {len(items)}"
+        by_section = {}
+        for m in items:
+            by_section.setdefault(m["sectionLabel"], []).append(m)
+        for sec in ["Best Moments", "Classic Scenes", "Hidden Gems"]:
+            assert sec in by_section, f"Missing section {sec}"
+            assert len(by_section[sec]) == 3, f"{sec} should have 3 items, has {len(by_section[sec])}"
+        # Mix of direct + embed
+        types = {m["sourceType"] for m in items}
+        assert types == {"direct", "embed"}
+
+    def test_reseed_does_not_create_duplicates(self, session):
+        """Call the seed coroutine directly and confirm count stays at 1."""
+        import sys
+        sys.path.insert(0, "/app/backend")
+        import asyncio
+        from server import _seed_westwood_ranch  # noqa
+
+        # Run seed twice more
+        async def _run():
+            await _seed_westwood_ranch()
+            await _seed_westwood_ranch()
+
+        asyncio.run(_run())
+
+        r = session.get(f"{API}/admin/profiles", headers=ADMIN_HEADERS, timeout=10)
+        westwoods = [p for p in r.json() if p.get("name") == "Westwood Ranch" and p.get("theme") == "western"]
+        assert len(westwoods) == 1, f"Reseed produced duplicates: {len(westwoods)}"
+
+        # Media count still 9
+        pid = westwoods[0]["id"]
+        rm = session.get(f"{API}/profiles/{pid}/media", timeout=10)
+        assert len(rm.json()) == 9
+
+
 # ---------- Cascade delete ----------
 class TestCascadeDelete:
     def test_delete_profile_removes_media_and_returns_404(self, session):

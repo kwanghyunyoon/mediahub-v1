@@ -64,6 +64,7 @@ export default function ProfileShell() {
 
   if (!profile) return null;
   const Icon = getIcon(profile.icon);
+  const isWestern = profile.theme === "western";
 
   const exit = () => {
     sessionStorage.removeItem(`mh_profile_${id}`);
@@ -84,13 +85,76 @@ export default function ProfileShell() {
 
   return (
     <div
-      className="min-h-screen flex flex-col"
+      className={`min-h-screen flex flex-col ${
+        isWestern ? "bg-[#1a1410] bg-western-grain text-[#F5E6D3]" : ""
+      }`}
+      data-theme={isWestern ? "western" : "default"}
       style={{ "--p-color": profile.color, "--p-rgb": rgb }}
     >
+      {/* Cinematic hero banner — western theme only */}
+      {isWestern && (
+        <section
+          data-testid="western-hero-banner"
+          className="relative w-full overflow-hidden border-b border-[#3a2a1c]"
+        >
+          <div
+            aria-hidden
+            className="absolute inset-0 bg-cover bg-center"
+            style={{
+              backgroundImage:
+                "url('https://images.unsplash.com/photo-1469854523086-cc02fe5d8800?auto=format&fit=crop&w=2000&q=80')",
+            }}
+          />
+          <div
+            aria-hidden
+            className="absolute inset-0"
+            style={{
+              background:
+                "linear-gradient(180deg, rgba(20,12,8,0.20) 0%, rgba(20,12,8,0.55) 55%, #1a1410 100%), linear-gradient(90deg, rgba(20,12,8,0.65) 0%, transparent 60%)",
+            }}
+          />
+          <div aria-hidden className="absolute inset-0 bg-vignette opacity-80" />
+
+          <div className="relative px-5 md:px-10 lg:px-16 pt-16 pb-12 md:pt-24 md:pb-16 lg:pt-32 lg:pb-24 max-w-7xl mx-auto">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#C2410C]/15 border border-[#C2410C]/40 mb-5">
+              <span className="w-1.5 h-1.5 rounded-full bg-[#F59E0B] animate-pulse" />
+              <span className="text-[10px] uppercase tracking-[0.4em] text-[#F5E6D3] font-semibold">
+                Featured Profile
+              </span>
+            </div>
+            <h1
+              data-testid="western-hero-title"
+              className="text-5xl sm:text-6xl md:text-7xl lg:text-8xl font-bold text-[#F5E6D3] leading-[0.95] tracking-tight max-w-3xl"
+              style={{ fontFamily: "'Playfair Display', serif" }}
+            >
+              Westwood<br />
+              <span className="italic text-[#D4A574]">Ranch</span>
+            </h1>
+            <p
+              data-testid="western-hero-subtitle"
+              className="mt-6 max-w-xl text-base md:text-lg text-[#F5E6D3]/70 leading-relaxed"
+              style={{ fontFamily: "'Manrope', sans-serif" }}
+            >
+              Dust on the boots. Whiskey on the breath. A reel of golden-hour rides,
+              long shadows, and stories carved into the canyon walls.
+            </p>
+            <div className="mt-8 flex flex-wrap items-center gap-x-6 gap-y-2 text-[11px] uppercase tracking-[0.3em] text-[#D4A574] font-semibold">
+              <span>Best Moments</span>
+              <span className="w-1 h-1 rounded-full bg-[#D4A574]/50" />
+              <span>Classic Scenes</span>
+              <span className="w-1 h-1 rounded-full bg-[#D4A574]/50" />
+              <span>Hidden Gems</span>
+            </div>
+          </div>
+        </section>
+      )}
+
       {/* Top bar */}
       <header
         data-testid="profile-header"
-        className="flex items-center justify-between px-5 md:px-10 py-5 border-b border-white/[0.06]"
+        className={`flex items-center justify-between px-5 md:px-10 py-5 border-b ${
+          isWestern ? "border-[#3a2a1c]" : "border-white/[0.06]"
+        }`}
       >
         <div className="flex items-center gap-4 min-w-0">
           <button
@@ -148,7 +212,9 @@ export default function ProfileShell() {
       {/* Section filter pills */}
       <nav
         data-testid="profile-sections-nav"
-        className="px-5 md:px-10 py-4 border-b border-white/[0.06] overflow-x-auto"
+        className={`px-5 md:px-10 py-4 border-b overflow-x-auto ${
+          isWestern ? "border-[#3a2a1c]" : "border-white/[0.06]"
+        }`}
       >
         {profile.sections.length === 0 ? (
           <p className="text-xs uppercase tracking-[0.2em] text-white/30">No sections configured</p>
@@ -220,12 +286,24 @@ export default function ProfileShell() {
                 <header className="flex items-baseline justify-between gap-4">
                   <div className="flex items-baseline gap-3 min-w-0">
                     <h2
-                      className="text-xl md:text-2xl font-light tracking-tight text-white truncate"
-                      style={{ fontFamily: "Outfit, sans-serif" }}
+                      className={`truncate ${
+                        isWestern
+                          ? "text-3xl md:text-4xl font-bold text-[#F5E6D3]"
+                          : "text-xl md:text-2xl font-light tracking-tight text-white"
+                      }`}
+                      style={{
+                        fontFamily: isWestern
+                          ? "'Playfair Display', serif"
+                          : "Outfit, sans-serif",
+                      }}
                     >
                       {group.label}
                     </h2>
-                    <span className="text-[11px] uppercase tracking-[0.2em] text-white/30">
+                    <span
+                      className={`text-[11px] uppercase tracking-[0.2em] ${
+                        isWestern ? "text-[#D4A574]/70" : "text-white/30"
+                      }`}
+                    >
                       {group.items.length} item{group.items.length !== 1 ? "s" : ""}
                     </span>
                   </div>
