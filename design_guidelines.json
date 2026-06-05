@@ -1,0 +1,111 @@
+{
+  "theme": "dark",
+  "archetype": "5 (Luxury / Cinematic)",
+  "global_rules": {
+    "mood": "Cinematic, private, tactile, premium.",
+    "background_strategy": "Deep charcoal/near-black (#050507) instead of pure black. Use a subtle CSS radial gradient or noise texture to create depth and a 'theater-like' vignette effect.",
+    "spacing_philosophy": "Generous. Center-aligned for PIN screens, wide grids for profile selection. Let the content breathe.",
+    "border_radius": "Rounded-2xl for profile cards, rounded-full for keypad buttons. Neumorphic or glassmorphic hints."
+  },
+  "typography": {
+    "heading_font": "Outfit",
+    "body_font": "Manrope",
+    "mono_font": "JetBrains Mono",
+    "scales": {
+      "h1": "text-4xl md:text-5xl lg:text-6xl tracking-tight font-light",
+      "h2": "text-2xl md:text-3xl lg:text-4xl tracking-tight",
+      "h3": "text-xl md:text-2xl",
+      "body": "text-base leading-relaxed text-white/70",
+      "label": "text-xs tracking-[0.2em] uppercase font-bold text-white/50"
+    }
+  },
+  "colors": {
+    "background": "#050507",
+    "surface": "#121216",
+    "surface_hover": "#1A1A20",
+    "border": "rgba(255, 255, 255, 0.08)",
+    "text_primary": "#FFFFFF",
+    "text_secondary": "rgba(255, 255, 255, 0.6)",
+    "admin_accent": "#E11D48",
+    "profile_swatches": [
+      { "name": "Crimson", "value": "#E11D48" },
+      { "name": "Emerald", "value": "#10B981" },
+      { "name": "Azure", "value": "#3B82F6" },
+      { "name": "Violet", "value": "#8B5CF6" },
+      { "name": "Amber", "value": "#F59E0B" },
+      { "name": "Rose", "value": "#F43F5E" }
+    ]
+  },
+  "layout_patterns": {
+    "home_grid": "flex flex-col items-center justify-center min-h-screen p-8. Grid container: grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-8 md:gap-12",
+    "admin_dashboard": "grid grid-cols-1 lg:grid-cols-12 gap-8 p-8 max-w-7xl mx-auto",
+    "admin_sidebar": "lg:col-span-3 space-y-6",
+    "admin_content": "lg:col-span-9"
+  },
+  "components": {
+    "profile_card": {
+      "base": "group relative flex flex-col items-center justify-center p-8 rounded-3xl bg-[#121216] border border-white/5 cursor-pointer transition-all duration-500 ease-out w-40 h-40 md:w-48 md:h-48",
+      "hover_state": "hover:scale-105 hover:bg-[#1A1A20] hover:border-[var(--profile-color)] hover:shadow-[0_0_40px_rgba(var(--profile-color-rgb),0.2)]",
+      "icon_wrapper": "w-16 h-16 rounded-full bg-white/5 flex items-center justify-center mb-4 transition-colors duration-500 group-hover:bg-[var(--profile-color)] group-hover:text-white text-white/50",
+      "text": "text-lg font-medium text-white/80 group-hover:text-white transition-colors duration-500",
+      "test_id": "profile-card-{id}"
+    },
+    "passcode_keypad": {
+      "container": "flex flex-col items-center justify-center space-y-8",
+      "dots_container": "flex space-x-4 mb-8",
+      "dot": "w-4 h-4 rounded-full border-2 border-white/20 transition-all duration-300",
+      "dot_filled": "bg-[var(--profile-color)] border-[var(--profile-color)] shadow-[0_0_15px_rgba(var(--profile-color-rgb),0.5)]",
+      "grid": "grid grid-cols-3 gap-4 md:gap-6",
+      "button": "w-16 h-16 md:w-20 md:h-20 rounded-full flex items-center justify-center text-2xl font-light text-white/80 bg-white/5 border border-white/5 hover:bg-white/10 hover:border-white/20 active:scale-95 transition-all duration-200",
+      "test_id": "keypad-btn-{digit}"
+    },
+    "admin_button": {
+      "base": "absolute top-8 right-8 w-12 h-12 rounded-full bg-transparent border border-white/10 flex items-center justify-center text-white/50 hover:text-white hover:bg-white/5 hover:border-white/30 transition-all duration-300",
+      "test_id": "admin-login-trigger"
+    },
+    "form_elements": {
+      "input": "w-full bg-[#121216] border border-white/10 rounded-xl px-4 py-3 text-white placeholder-white/30 focus:outline-none focus:ring-1 focus:ring-[var(--profile-color)] focus:border-[var(--profile-color)] transition-all",
+      "label": "block text-xs uppercase tracking-[0.1em] text-white/50 mb-2 font-bold",
+      "color_picker_btn": "w-10 h-10 rounded-full border-2 border-transparent hover:scale-110 transition-transform focus:border-white",
+      "icon_picker_btn": "p-3 rounded-xl bg-white/5 border border-white/5 hover:bg-white/10 hover:border-white/20 transition-all flex items-center justify-center"
+    }
+  },
+  "screens": {
+    "home": {
+      "description": "Netflix 'Who's watching' cinematic style.",
+      "layout": "Centered vertically and horizontally. A subtle title 'Who's watching?' (h2) at the top. The grid of profiles sits below. The admin gear icon is subtly placed top-right."
+    },
+    "passcode_entry": {
+      "description": "Appears as a full-screen modal or separate route with a deep backdrop blur (glassmorphism) over the home screen.",
+      "layout": "Profile icon (colored) and name at the top center. 4 empty dots below it. The 3x4 numeric keypad in the center. A 'Cancel' button below the keypad."
+    },
+    "profile_shell": {
+      "description": "The inner app shell once authenticated.",
+      "layout": "A top or left navigation bar containing the section labels dynamically loaded from the profile. The active section is highlighted with the profile's accent color. The main content area is an empty placeholder for future media features."
+    },
+    "admin_dashboard": {
+      "description": "Master control panel to manage profiles.",
+      "layout": "Bento-grid style or Split layout. Left/Top: List of existing profiles in sleek horizontal rows (with edit/delete actions). Right/Bottom: Create/Edit profile form."
+    }
+  },
+  "motion_and_interactions": {
+    "page_transition": "Fade in with a slight upward drift (framer-motion, y: 10 -> 0, opacity: 0 -> 1, duration: 0.6s).",
+    "keypad_press": "Haptic-like quick scale down to 0.95 and back to 1. Ripple effect if possible.",
+    "error_shake": "If passcode is wrong, the 4 dots shake horizontally (x: [-10, 10, -10, 10, 0]) and flash red.",
+    "hover_glow": "Profile cards must emit a soft shadow glow matching their assigned color when hovered. This requires injecting the color variable into CSS or Tailwind inline styles."
+  },
+  "media": {
+    "background_texture": "https://images.unsplash.com/photo-1602475063211-3d98d60e3b1f?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2Njl8MHwxfHNlYXJjaHwxfHxkYXJrJTIwY2luZW1hdGljJTIwdGV4dHVyZSUyMGdyYWlufGVufDB8fHx8MTc4MDY4NzI2NXww&ixlib=rb-4.1.0&q=85",
+    "texture_usage": "Set as a fixed, low-opacity (e.g., 5%) background layer with mix-blend-mode: overlay or screen, behind everything to add a cinematic grain."
+  },
+  "instructions_to_main_agent": [
+    "Use framer-motion for all micro-interactions: card hovering, keypad entry stagger, and error shaking.",
+    "Dynamically map the profile's chosen color to CSS variables (e.g., `--profile-color`) so Tailwind's arbitrary values (like `bg-[var(--profile-color)]`) can use it for active states and glows.",
+    "Use lucide-react for the preset icon library. In the admin form, render a curated list of Lucide icons (e.g., User, Tv, Film, Music, Gamepad2, Heart) for selection.",
+    "Ensure the Master Passcode logic strictly checks for '1115' to access the Admin Panel.",
+    "For the section labels in the admin form, use a dynamic array input (add/remove text fields).",
+    "All form inputs and buttons must have `data-testid` attributes as specified.",
+    "The UI must remain strictly dark mode. Do not implement a light theme.",
+    "Shadcn components to install: button, input, dialog (for passcode if you prefer modal over route), form."
+  ]
+}
