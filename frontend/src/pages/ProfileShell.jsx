@@ -2,12 +2,27 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { motion } from "framer-motion";
 import { ArrowLeft, LogOut, Plus, Library } from "lucide-react";
+import {
+  DndContext,
+  closestCenter,
+  PointerSensor,
+  KeyboardSensor,
+  useSensor,
+  useSensors,
+} from "@dnd-kit/core";
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  rectSortingStrategy,
+} from "@dnd-kit/sortable";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { getIcon, hexToRgb } from "@/lib/registry";
-import { listMedia } from "@/lib/api";
-import MediaCard from "@/components/MediaCard";
+import { listMedia, reorderMedia } from "@/lib/api";
 import MediaForm from "@/components/MediaForm";
 import VideoPlayer from "@/components/VideoPlayer";
+import SortableMediaCard from "@/components/SortableMediaCard";
 
 export default function ProfileShell() {
   const { id } = useParams();
@@ -62,9 +77,54 @@ export default function ProfileShell() {
     return groups.filter((g) => g.label === activeSection);
   }, [profile, media, activeSection]);
 
+  // Hooks must run unconditionally on every render — keep above the early-return.
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+  );
+
   if (!profile) return null;
   const Icon = getIcon(profile.icon);
   const isWestern = profile.theme === "western";
+  const isNeon = profile.theme === "neon";
+  const isStudio = profile.theme === "studio";
+
+  const themeBgClass = isWestern
+    ? "bg-[#1a1410] bg-western-grain text-[#F5E6D3]"
+    : isNeon
+    ? "bg-[#07051a] bg-neon-grid text-[#f1e9ff]"
+    : isStudio
+    ? "bg-[#18120c] bg-studio-paper text-[#f0e5d2]"
+    : "";
+
+  const themeBorderClass =
+    isWestern
+      ? "border-[#3a2a1c]"
+      : isNeon
+      ? "border-[#2a1845]"
+      : isStudio
+      ? "border-[#2d2419]"
+      : "border-white/[0.06]";
+
+  const handleDragEnd = (sectionLabel) => (event) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    setMedia((prev) => {
+      const sectionItems = prev.filter((m) => m.sectionLabel === sectionLabel);
+      const ids = sectionItems.map((m) => m.id);
+      const oldIdx = ids.indexOf(active.id);
+      const newIdx = ids.indexOf(over.id);
+      if (oldIdx < 0 || newIdx < 0) return prev;
+      const reordered = arrayMove(sectionItems, oldIdx, newIdx);
+      // PATCH the new order to the server (fire-and-forget; show toast on err)
+      reorderMedia(profile.id, sectionLabel, reordered.map((m) => m.id)).catch(() =>
+        toast.error("Reorder failed")
+      );
+      // Optimistic UI: rebuild full media array with new order for this section
+      const others = prev.filter((m) => m.sectionLabel !== sectionLabel);
+      return [...others, ...reordered.map((m, i) => ({ ...m, order: i }))];
+    });
+  };
 
   const exit = () => {
     sessionStorage.removeItem(`mh_profile_${id}`);
@@ -85,10 +145,8 @@ export default function ProfileShell() {
 
   return (
     <div
-      className={`min-h-screen flex flex-col ${
-        isWestern ? "bg-[#1a1410] bg-western-grain text-[#F5E6D3]" : ""
-      }`}
-      data-theme={isWestern ? "western" : "default"}
+      className={`min-h-screen flex flex-col ${themeBgClass}`}
+      data-theme={profile.theme || "default"}
       style={{ "--p-color": profile.color, "--p-rgb": rgb }}
     >
       {/* Cinematic hero banner — western theme only */}
@@ -212,9 +270,7 @@ export default function ProfileShell() {
       {/* Section filter pills */}
       <nav
         data-testid="profile-sections-nav"
-        className={`px-5 md:px-10 py-4 border-b overflow-x-auto ${
-          isWestern ? "border-[#3a2a1c]" : "border-white/[0.06]"
-        }`}
+        className={`px-5 md:px-10 py-4 border-b overflow-x-auto ${themeBorderClass}`}
       >
         {profile.sections.length === 0 ? (
           <p className="text-xs uppercase tracking-[0.2em] text-white/30">No sections configured</p>
@@ -328,20 +384,31 @@ export default function ProfileShell() {
                     </p>
                   </div>
                 ) : (
-                  <div
-                    data-testid={`media-grid-${group.label}`}
-                    className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5"
+                  <DndContext
+                    sensors={sensors}
+                    collisionDetection={closestCenter}
+                    onDragEnd={handleDragEnd(group.label)}
                   >
-                    {group.items.map((m, idx) => (
-                      <MediaCard
-                        key={m.id}
-                        media={m}
-                        accentColor={profile.color}
-                        index={idx}
-                        onClick={setPlaying}
-                      />
-                    ))}
-                  </div>
+                    <SortableContext
+                      items={group.items.map((m) => m.id)}
+                      strategy={rectSortingStrategy}
+                    >
+                      <div
+                        data-testid={`media-grid-${group.label}`}
+                        className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5"
+                      >
+                        {group.items.map((m, idx) => (
+                          <SortableMediaCard
+                            key={m.id}
+                            media={m}
+                            accentColor={profile.color}
+                            index={idx}
+                            onClick={setPlaying}
+                          />
+                        ))}
+                      </div>
+                    </SortableContext>
+                  </DndContext>
                 )}
               </section>
             ))}

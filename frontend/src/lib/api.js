@@ -72,4 +72,12 @@ export const deleteMedia = async (profileId, mediaId) => {
   return data;
 };
 
+export const reorderMedia = async (profileId, sectionLabel, mediaIds) => {
+  const { data } = await api.post(`/profiles/${profileId}/media/reorder`, {
+    sectionLabel,
+    mediaIds,
+  });
+  return data;
+};
+
 export default api;

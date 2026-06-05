@@ -111,6 +111,75 @@ h3 {
     letter-spacing: -0.015em;
 }
 
+/* Neon Arcade theme — synth-purple base + magenta glow */
+[data-theme="neon"] {
+    background-color: #07051a;
+    color: #f1e9ff;
+}
+[data-theme="neon"] h1,
+[data-theme="neon"] h2,
+[data-theme="neon"] h3 {
+    font-family: "Outfit", "Manrope", sans-serif;
+    letter-spacing: 0.01em;
+    text-shadow: 0 0 18px rgba(255, 45, 135, 0.45),
+        0 0 36px rgba(0, 230, 255, 0.18);
+}
+.bg-neon-grid {
+    background-image:
+        radial-gradient(
+            ellipse at 20% 0%,
+            rgba(255, 45, 135, 0.18) 0%,
+            transparent 60%
+        ),
+        radial-gradient(
+            ellipse at 80% 100%,
+            rgba(0, 230, 255, 0.12) 0%,
+            transparent 55%
+        ),
+        repeating-linear-gradient(
+            0deg,
+            rgba(255, 255, 255, 0.025) 0px,
+            rgba(255, 255, 255, 0.025) 1px,
+            transparent 1px,
+            transparent 28px
+        ),
+        repeating-linear-gradient(
+            90deg,
+            rgba(255, 255, 255, 0.025) 0px,
+            rgba(255, 255, 255, 0.025) 1px,
+            transparent 1px,
+            transparent 28px
+        );
+}
+
+/* Studio Loft theme — warm monochrome serif */
+[data-theme="studio"] {
+    background-color: #18120c;
+    color: #f0e5d2;
+}
+[data-theme="studio"] h1,
+[data-theme="studio"] h2,
+[data-theme="studio"] h3 {
+    font-family: "DM Serif Display", "Playfair Display", Georgia, serif;
+    letter-spacing: -0.005em;
+    font-style: italic;
+}
+.bg-studio-paper {
+    background-image:
+        radial-gradient(
+            ellipse at 50% 0%,
+            rgba(212, 165, 116, 0.07) 0%,
+            transparent 60%
+        ),
+        repeating-linear-gradient(
+            135deg,
+            rgba(255, 255, 255, 0.012) 0px,
+            rgba(255, 255, 255, 0.012) 1px,
+            transparent 1px,
+            transparent 4px
+        );
+}
+
 /* Subtle wood-grain layered gradient for the western theme background */
 .bg-western-grain {
     background-image:

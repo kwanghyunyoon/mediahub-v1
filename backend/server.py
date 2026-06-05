@@ -131,6 +131,7 @@ class MediaCreate(BaseModel):
     sourceType: Literal["direct", "embed"]
     sourceUrl: str = Field(min_length=1, max_length=2048)
     posterUrl: Optional[str] = Field(default=None, max_length=2048)
+    order: Optional[int] = Field(default=None, ge=0)
 
     @field_validator('sourceUrl')
     @classmethod
@@ -230,6 +231,7 @@ def _media_to_dict(doc: dict) -> dict:
         "sourceType": doc["sourceType"],
         "sourceUrl": doc["sourceUrl"],
         "posterUrl": doc.get("posterUrl"),
+        "order": doc.get("order", 0),
         "createdAt": doc.get("createdAt"),
         "updatedAt": doc.get("updatedAt"),
     }
@@ -340,7 +342,9 @@ async def delete_profile(
 @api_router.get("/profiles/{profile_id}/media")
 async def list_media(profile_id: str):
     await _ensure_profile_exists(profile_id)
-    cursor = db.media.find({"profileId": profile_id}, {"_id": 0}).sort("createdAt", 1)
+    cursor = db.media.find({"profileId": profile_id}, {"_id": 0}).sort(
+        [("sectionLabel", 1), ("order", 1), ("createdAt", 1)]
+    )
     docs = await cursor.to_list(2000)
     return [_media_to_dict(d) for d in docs]
 
@@ -349,6 +353,11 @@ async def list_media(profile_id: str):
 async def create_media(profile_id: str, body: MediaCreate):
     await _ensure_profile_exists(profile_id)
     now = _now_iso()
+    next_order = body.order
+    if next_order is None:
+        next_order = await db.media.count_documents(
+            {"profileId": profile_id, "sectionLabel": body.sectionLabel.strip()}
+        )
     doc = {
         "id": str(uuid.uuid4()),
         "profileId": profile_id,
@@ -358,6 +367,7 @@ async def create_media(profile_id: str, body: MediaCreate):
         "sourceType": body.sourceType,
         "sourceUrl": body.sourceUrl,
         "posterUrl": body.posterUrl,
+        "order": next_order,
         "createdAt": now,
         "updatedAt": now,
     }
@@ -398,6 +408,35 @@ async def delete_media(profile_id: str, media_id: str):
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Media not found")
     return {"ok": True, "deleted": media_id}
+
+
+class MediaReorder(BaseModel):
+    sectionLabel: str = Field(min_length=1, max_length=50)
+    mediaIds: List[str] = Field(min_length=1, max_length=2000)
+
+
+@api_router.post("/profiles/{profile_id}/media/reorder")
+async def reorder_media(profile_id: str, body: MediaReorder):
+    """Set the order of media items within one section, by id sequence."""
+    await _ensure_profile_exists(profile_id)
+    section = body.sectionLabel.strip()
+    now = _now_iso()
+    # Verify the ids belong to this profile + section to avoid cross-section drift
+    existing = await db.media.find(
+        {"profileId": profile_id, "sectionLabel": section, "id": {"$in": body.mediaIds}},
+        {"_id": 0, "id": 1},
+    ).to_list(len(body.mediaIds) + 1)
+    valid_ids = {d["id"] for d in existing}
+    updated = 0
+    for idx, mid in enumerate(body.mediaIds):
+        if mid not in valid_ids:
+            continue
+        await db.media.update_one(
+            {"id": mid, "profileId": profile_id},
+            {"$set": {"order": idx, "updatedAt": now}},
+        )
+        updated += 1
+    return {"ok": True, "updated": updated, "section": section}
 
 
 app.include_router(api_router)
@@ -511,7 +550,10 @@ async def _seed_westwood_ranch() -> None:
     ]
 
     docs = []
+    section_counters = {}
     for title, desc, section, src_type, src_url in items:
+        order_idx = section_counters.get(section, 0)
+        section_counters[section] = order_idx + 1
         docs.append({
             "id": str(uuid.uuid4()),
             "profileId": pid,
@@ -521,6 +563,7 @@ async def _seed_westwood_ranch() -> None:
             "sourceType": src_type,
             "sourceUrl": src_url,
             "posterUrl": poster_by_title.get(title),
+            "order": order_idx,
             "createdAt": now,
             "updatedAt": now,
         })
@@ -534,8 +577,37 @@ async def _seed_westwood_ranch() -> None:
 async def _startup_seed():
     try:
         await _seed_westwood_ranch()
+        await _backfill_media_order()
     except Exception as e:
         logger.exception(f"Seed failed: {e}")
+
+
+async def _backfill_media_order() -> None:
+    """Assign sequential `order` to any media items missing it, grouped by
+    (profileId, sectionLabel), sorted by createdAt. Idempotent."""
+    missing = await db.media.count_documents(
+        {"$or": [{"order": {"$exists": False}}, {"order": None}]}
+    )
+    if missing == 0:
+        return
+    # Build the assignment by iterating all media in a stable order
+    cursor = db.media.find({}, {"_id": 0, "id": 1, "profileId": 1, "sectionLabel": 1, "order": 1}).sort(
+        [("profileId", 1), ("sectionLabel", 1), ("createdAt", 1)]
+    )
+    counters: dict = {}
+    now = _now_iso()
+    fixed = 0
+    async for doc in cursor:
+        key = (doc["profileId"], doc["sectionLabel"])
+        idx = counters.get(key, 0)
+        counters[key] = idx + 1
+        if doc.get("order") is None:
+            await db.media.update_one(
+                {"id": doc["id"]}, {"$set": {"order": idx, "updatedAt": now}}
+            )
+            fixed += 1
+    if fixed:
+        logger.info(f"Backfilled order on {fixed} media items.")
 
 app.add_middleware(
     CORSMiddleware,

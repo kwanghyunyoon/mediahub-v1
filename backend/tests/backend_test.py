@@ -643,3 +643,191 @@ class TestCascadeDelete:
         # GET media -> 404 (profile gone)
         rg2 = session.get(f"{API}/profiles/{pid}/media", timeout=10)
         assert rg2.status_code == 404
+
+
+# ---------- Iteration 6: Media order + reorder + new themes ----------
+class TestMediaOrderAndReorder:
+    """Order field, default-on-create=count, reorder endpoint, validation."""
+
+    def _new_profile(self, session, name):
+        payload = {
+            "name": name, "passcode": "7070",
+            "color": "#10b981", "icon": "Film", "sections": ["S1", "S2"],
+        }
+        r = session.post(f"{API}/admin/profiles", json=payload, headers=ADMIN_HEADERS, timeout=10)
+        assert r.status_code == 200
+        return r.json()["id"]
+
+    def _add(self, session, pid, title, section, order=None):
+        body = {
+            "title": title, "sectionLabel": section,
+            "sourceType": "direct", "sourceUrl": "https://example.com/x.mp4",
+        }
+        if order is not None:
+            body["order"] = order
+        r = session.post(f"{API}/profiles/{pid}/media", json=body, headers=JSON_HEADERS, timeout=10)
+        assert r.status_code == 200, r.text
+        return r.json()
+
+    def test_order_default_appends(self, session):
+        pid = self._new_profile(session, "TEST_OrderAppend")
+        a = self._add(session, pid, "A", "S1")
+        b = self._add(session, pid, "B", "S1")
+        c = self._add(session, pid, "C", "S1")
+        assert a["order"] == 0
+        assert b["order"] == 1
+        assert c["order"] == 2
+        # Other section starts at 0 independently
+        d = self._add(session, pid, "D", "S2")
+        assert d["order"] == 0
+        session.delete(f"{API}/admin/profiles/{pid}", headers=ADMIN_HEADERS, timeout=10)
+
+    def test_order_explicit_accepted(self, session):
+        pid = self._new_profile(session, "TEST_OrderExplicit")
+        a = self._add(session, pid, "A", "S1", order=5)
+        assert a["order"] == 5
+        session.delete(f"{API}/admin/profiles/{pid}", headers=ADMIN_HEADERS, timeout=10)
+
+    def test_list_sorted_by_section_then_order(self, session):
+        pid = self._new_profile(session, "TEST_ListSort")
+        s1a = self._add(session, pid, "S1A", "S1")  # 0
+        s1b = self._add(session, pid, "S1B", "S1")  # 1
+        s2a = self._add(session, pid, "S2A", "S2")  # 0
+        r = session.get(f"{API}/profiles/{pid}/media", timeout=10)
+        items = r.json()
+        # Section sort alpha; S1 before S2
+        sections = [m["sectionLabel"] for m in items]
+        assert sections == ["S1", "S1", "S2"]
+        # Within S1, order ascending
+        s1 = [m for m in items if m["sectionLabel"] == "S1"]
+        assert [m["order"] for m in s1] == [0, 1]
+        assert s1[0]["id"] == s1a["id"] and s1[1]["id"] == s1b["id"]
+        session.delete(f"{API}/admin/profiles/{pid}", headers=ADMIN_HEADERS, timeout=10)
+
+    def test_reorder_basic(self, session):
+        pid = self._new_profile(session, "TEST_Reorder1")
+        a = self._add(session, pid, "A", "S1")
+        b = self._add(session, pid, "B", "S1")
+        c = self._add(session, pid, "C", "S1")
+        # reverse
+        new_ids = [c["id"], b["id"], a["id"]]
+        r = session.post(
+            f"{API}/profiles/{pid}/media/reorder",
+            json={"sectionLabel": "S1", "mediaIds": new_ids},
+            headers=JSON_HEADERS, timeout=10,
+        )
+        assert r.status_code == 200, r.text
+        data = r.json()
+        assert data == {"ok": True, "updated": 3, "section": "S1"}
+        rg = session.get(f"{API}/profiles/{pid}/media", timeout=10)
+        items = [m for m in rg.json() if m["sectionLabel"] == "S1"]
+        items.sort(key=lambda m: m["order"])
+        assert [m["id"] for m in items] == new_ids
+        session.delete(f"{API}/admin/profiles/{pid}", headers=ADMIN_HEADERS, timeout=10)
+
+    def test_reorder_skips_unknown_ids(self, session):
+        pid = self._new_profile(session, "TEST_Reorder2")
+        a = self._add(session, pid, "A", "S1")
+        b = self._add(session, pid, "B", "S1")
+        # Mix valid + unknown
+        r = session.post(
+            f"{API}/profiles/{pid}/media/reorder",
+            json={"sectionLabel": "S1", "mediaIds": [b["id"], "unknown-xyz", a["id"]]},
+            headers=JSON_HEADERS, timeout=10,
+        )
+        assert r.status_code == 200
+        data = r.json()
+        assert data["updated"] == 2  # unknown skipped
+        assert data["section"] == "S1"
+        session.delete(f"{API}/admin/profiles/{pid}", headers=ADMIN_HEADERS, timeout=10)
+
+    def test_reorder_skips_wrong_section(self, session):
+        pid = self._new_profile(session, "TEST_Reorder3")
+        a = self._add(session, pid, "A", "S1")
+        z = self._add(session, pid, "Z", "S2")  # wrong section id
+        r = session.post(
+            f"{API}/profiles/{pid}/media/reorder",
+            json={"sectionLabel": "S1", "mediaIds": [a["id"], z["id"]]},
+            headers=JSON_HEADERS, timeout=10,
+        )
+        assert r.status_code == 200
+        assert r.json()["updated"] == 1
+        session.delete(f"{API}/admin/profiles/{pid}", headers=ADMIN_HEADERS, timeout=10)
+
+    def test_reorder_empty_list_422(self, session):
+        pid = self._new_profile(session, "TEST_Reorder4")
+        r = session.post(
+            f"{API}/profiles/{pid}/media/reorder",
+            json={"sectionLabel": "S1", "mediaIds": []},
+            headers=JSON_HEADERS, timeout=10,
+        )
+        assert r.status_code == 422
+        session.delete(f"{API}/admin/profiles/{pid}", headers=ADMIN_HEADERS, timeout=10)
+
+    def test_reorder_unknown_profile_404(self, session):
+        r = session.post(
+            f"{API}/profiles/no-such-profile/media/reorder",
+            json={"sectionLabel": "S1", "mediaIds": ["abc"]},
+            headers=JSON_HEADERS, timeout=10,
+        )
+        assert r.status_code == 404
+
+
+class TestWestwoodOrderBackfill:
+    """Westwood Ranch seeded items expose order=0,1,2 per section."""
+
+    def test_orders_sequential_per_section(self, session):
+        r = session.get(f"{API}/admin/profiles", headers=ADMIN_HEADERS, timeout=10)
+        westwoods = [p for p in r.json() if p.get("name") == "Westwood Ranch" and p.get("theme") == "western"]
+        assert len(westwoods) == 1
+        pid = westwoods[0]["id"]
+        rm = session.get(f"{API}/profiles/{pid}/media", timeout=10)
+        items = rm.json()
+        assert len(items) == 9
+        by_section = {}
+        for m in items:
+            by_section.setdefault(m["sectionLabel"], []).append(m)
+        for sec, lst in by_section.items():
+            lst.sort(key=lambda m: m["order"])
+            assert [m["order"] for m in lst] == [0, 1, 2], f"{sec} orders={[m['order'] for m in lst]}"
+
+
+class TestNewThemes:
+    """Neon and Studio themes accepted; arbitrary strings accepted."""
+
+    def _create_theme(self, session, name, theme):
+        payload = {
+            "name": name, "passcode": "8181",
+            "color": "#FF2D87", "icon": "Film", "sections": ["A"],
+            "theme": theme,
+        }
+        r = session.post(f"{API}/admin/profiles", json=payload, headers=ADMIN_HEADERS, timeout=10)
+        return r
+
+    def test_theme_neon(self, session):
+        r = self._create_theme(session, "TEST_ThemeNeon", "neon")
+        assert r.status_code == 200
+        pid = r.json()["id"]
+        assert r.json()["theme"] == "neon"
+        # Verify via GET
+        rp = session.get(f"{API}/profiles", timeout=10)
+        pub = [p for p in rp.json() if p["id"] == pid][0]
+        assert pub["theme"] == "neon"
+        session.delete(f"{API}/admin/profiles/{pid}", headers=ADMIN_HEADERS, timeout=10)
+
+    def test_theme_studio(self, session):
+        r = self._create_theme(session, "TEST_ThemeStudio", "studio")
+        assert r.status_code == 200
+        pid = r.json()["id"]
+        assert r.json()["theme"] == "studio"
+        rp = session.get(f"{API}/profiles", timeout=10)
+        pub = [p for p in rp.json() if p["id"] == pid][0]
+        assert pub["theme"] == "studio"
+        session.delete(f"{API}/admin/profiles/{pid}", headers=ADMIN_HEADERS, timeout=10)
+
+    def test_theme_arbitrary_string_accepted(self, session):
+        r = self._create_theme(session, "TEST_ThemeWeird", "myCustomTheme")
+        assert r.status_code == 200
+        pid = r.json()["id"]
+        assert r.json()["theme"] == "myCustomTheme"
+        session.delete(f"{API}/admin/profiles/{pid}", headers=ADMIN_HEADERS, timeout=10)

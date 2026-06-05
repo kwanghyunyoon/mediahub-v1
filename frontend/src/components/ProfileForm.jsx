@@ -1,11 +1,28 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { Plus, X, Check, Save, Trash2 } from "lucide-react";
+import { Plus, X, Check, Save, Trash2, GripVertical } from "lucide-react";
 import { toast } from "sonner";
+import {
+  DndContext,
+  closestCenter,
+  PointerSensor,
+  KeyboardSensor,
+  useSensor,
+  useSensors,
+} from "@dnd-kit/core";
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ICON_NAMES, getIcon, COLOR_SWATCHES, hexToRgb } from "@/lib/registry";
+import { THEMES } from "@/lib/themes";
 import { adminCreateProfile, adminUpdateProfile } from "@/lib/api";
 
 const DEFAULT = {
@@ -14,7 +31,48 @@ const DEFAULT = {
   color: COLOR_SWATCHES[0].value,
   icon: "User",
   sections: ["Movies", "Music"],
+  theme: "default",
 };
+
+function SortableSectionRow({ id, label, onRemove }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
+    useSortable({ id });
+  return (
+    <div
+      ref={setNodeRef}
+      style={{
+        transform: CSS.Transform.toString(transform),
+        transition,
+        zIndex: isDragging ? 20 : 1,
+      }}
+      data-testid={`section-row-${id}`}
+      className={`flex items-center gap-2 px-3 py-2 rounded-xl bg-[#0a0a0d] border border-white/[0.08] ${
+        isDragging ? "opacity-90 shadow-xl border-white/20" : ""
+      }`}
+    >
+      <button
+        type="button"
+        {...attributes}
+        {...listeners}
+        data-testid={`section-grip-${id}`}
+        aria-label="Drag to reorder"
+        className="w-6 h-6 -ml-1 rounded-md flex items-center justify-center text-white/30 hover:text-white/70 cursor-grab active:cursor-grabbing"
+      >
+        <GripVertical className="w-4 h-4" />
+      </button>
+      <span className="flex-1 text-sm text-white/85 truncate">{label}</span>
+      <button
+        type="button"
+        data-testid={`section-remove-${id}`}
+        onClick={onRemove}
+        aria-label={`Remove ${label}`}
+        className="w-7 h-7 rounded-full flex items-center justify-center text-white/40 hover:text-[#F43F5E] hover:bg-[#F43F5E]/10 transition-colors"
+      >
+        <X className="w-4 h-4" />
+      </button>
+    </div>
+  );
+}
 
 export default function ProfileForm({ initial, onClose, onSaved }) {
   const isEdit = !!initial;
@@ -24,10 +82,16 @@ export default function ProfileForm({ initial, onClose, onSaved }) {
     color: initial?.color ?? DEFAULT.color,
     icon: initial?.icon ?? DEFAULT.icon,
     sections: initial?.sections?.length ? [...initial.sections] : [...DEFAULT.sections],
+    theme: initial?.theme ?? DEFAULT.theme,
   }));
   const [newSection, setNewSection] = useState("");
   const [saving, setSaving] = useState(false);
   const [errors, setErrors] = useState({});
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+  );
 
   const set = (k, v) => setForm((p) => ({ ...p, [k]: v }));
 
@@ -44,6 +108,10 @@ export default function ProfileForm({ initial, onClose, onSaved }) {
   const addSection = () => {
     const v = newSection.trim();
     if (!v) return;
+    if (form.sections.includes(v)) {
+      toast.error("Section already exists");
+      return;
+    }
     if (form.sections.length >= 20) {
       toast.error("Maximum 20 sections");
       return;
@@ -52,8 +120,17 @@ export default function ProfileForm({ initial, onClose, onSaved }) {
     setNewSection("");
   };
 
-  const removeSection = (idx) =>
-    set("sections", form.sections.filter((_, i) => i !== idx));
+  const removeSection = (label) =>
+    set("sections", form.sections.filter((s) => s !== label));
+
+  const handleSectionDragEnd = (event) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const oldIdx = form.sections.indexOf(active.id);
+    const newIdx = form.sections.indexOf(over.id);
+    if (oldIdx < 0 || newIdx < 0) return;
+    set("sections", arrayMove(form.sections, oldIdx, newIdx));
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -66,6 +143,7 @@ export default function ProfileForm({ initial, onClose, onSaved }) {
         color: form.color,
         icon: form.icon,
         sections: form.sections,
+        theme: form.theme,
       };
       if (isEdit) {
         await adminUpdateProfile(initial.id, payload);
@@ -232,31 +310,30 @@ export default function ProfileForm({ initial, onClose, onSaved }) {
       {/* Sections */}
       <div>
         <Label className="text-[10px] uppercase tracking-[0.2em] text-white/40 mb-3 block">
-          Section Labels
+          Section Labels <span className="normal-case tracking-normal text-white/30">(drag to reorder)</span>
         </Label>
-        <div className="flex flex-wrap gap-2 mb-3" data-testid="sections-list">
-          {form.sections.map((s, idx) => (
-            <span
-              key={`${s}-${idx}`}
-              data-testid={`section-pill-${idx}`}
-              className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-sm bg-white/[0.05] border border-white/[0.08] text-white/85"
-            >
-              {s}
-              <button
-                type="button"
-                data-testid={`section-remove-${idx}`}
-                onClick={() => removeSection(idx)}
-                className="w-4 h-4 rounded-full flex items-center justify-center text-white/40 hover:text-white"
-                aria-label={`Remove ${s}`}
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
-            </span>
-          ))}
-          {form.sections.length === 0 && (
-            <span className="text-xs text-white/30">No sections yet</span>
-          )}
-        </div>
+        {form.sections.length === 0 ? (
+          <p className="text-xs text-white/30 mb-3" data-testid="sections-empty">No sections yet</p>
+        ) : (
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragEnd={handleSectionDragEnd}
+          >
+            <SortableContext items={form.sections} strategy={verticalListSortingStrategy}>
+              <div className="space-y-2 mb-3" data-testid="sections-list">
+                {form.sections.map((s) => (
+                  <SortableSectionRow
+                    key={s}
+                    id={s}
+                    label={s}
+                    onRemove={() => removeSection(s)}
+                  />
+                ))}
+              </div>
+            </SortableContext>
+          </DndContext>
+        )}
         <div className="flex gap-2">
           <Input
             data-testid="section-input"
@@ -282,6 +359,51 @@ export default function ProfileForm({ initial, onClose, onSaved }) {
             <Plus className="w-4 h-4" />
             Add
           </Button>
+        </div>
+      </div>
+
+      {/* Theme */}
+      <div>
+        <Label className="text-[10px] uppercase tracking-[0.2em] text-white/40 mb-3 block">
+          Theme
+        </Label>
+        <div
+          data-testid="theme-grid"
+          className="grid grid-cols-2 gap-2"
+        >
+          {THEMES.map((t) => {
+            const active = form.theme === t.key;
+            return (
+              <button
+                key={t.key}
+                type="button"
+                data-testid={`theme-option-${t.key}`}
+                onClick={() => set("theme", t.key)}
+                className={`relative text-left rounded-xl border p-3 transition-colors ${
+                  active
+                    ? "border-[var(--p-color)] bg-[rgba(var(--p-rgb),0.08)]"
+                    : "border-white/10 bg-[#0a0a0d] hover:border-white/20"
+                }`}
+              >
+                <div className="flex items-center gap-2 mb-1.5">
+                  <span
+                    aria-hidden
+                    className="w-4 h-4 rounded-full border border-white/15"
+                    style={{ backgroundColor: t.swatch }}
+                  />
+                  <span className="text-sm font-medium text-white truncate">{t.name}</span>
+                  {active && (
+                    <Check
+                      className="w-3.5 h-3.5 ml-auto"
+                      style={{ color: form.color }}
+                      strokeWidth={2.5}
+                    />
+                  )}
+                </div>
+                <p className="text-[11px] text-white/40">{t.subtitle}</p>
+              </button>
+            );
+          })}
         </div>
       </div>
 
