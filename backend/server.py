@@ -418,6 +418,7 @@ class MediaReorder(BaseModel):
 @api_router.post("/profiles/{profile_id}/media/reorder")
 async def reorder_media(profile_id: str, body: MediaReorder):
     """Set the order of media items within one section, by id sequence."""
+    from pymongo import UpdateOne
     await _ensure_profile_exists(profile_id)
     section = body.sectionLabel.strip()
     now = _now_iso()
@@ -427,15 +428,18 @@ async def reorder_media(profile_id: str, body: MediaReorder):
         {"_id": 0, "id": 1},
     ).to_list(len(body.mediaIds) + 1)
     valid_ids = {d["id"] for d in existing}
-    updated = 0
-    for idx, mid in enumerate(body.mediaIds):
-        if mid not in valid_ids:
-            continue
-        await db.media.update_one(
+    ops = [
+        UpdateOne(
             {"id": mid, "profileId": profile_id},
             {"$set": {"order": idx, "updatedAt": now}},
         )
-        updated += 1
+        for idx, mid in enumerate(body.mediaIds)
+        if mid in valid_ids
+    ]
+    updated = 0
+    if ops:
+        result = await db.media.bulk_write(ops, ordered=False)
+        updated = result.modified_count
     return {"ok": True, "updated": updated, "section": section}
 
 
@@ -483,7 +487,7 @@ async def _seed_westwood_ranch() -> None:
                 {"posterUrl": {"$exists": False}}, {"posterUrl": None}
             ]},
             {"_id": 0, "id": 1, "title": 1},
-        ):
+        ).limit(1000):
             url = poster_by_title.get(doc["title"])
             if url:
                 await db.media.update_one(
@@ -593,7 +597,7 @@ async def _backfill_media_order() -> None:
     # Build the assignment by iterating all media in a stable order
     cursor = db.media.find({}, {"_id": 0, "id": 1, "profileId": 1, "sectionLabel": 1, "order": 1}).sort(
         [("profileId", 1), ("sectionLabel", 1), ("createdAt", 1)]
-    )
+    ).limit(10000)
     counters: dict = {}
     now = _now_iso()
     fixed = 0
