@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { Save, Plus } from "lucide-react";
+import { Save, Plus, Sparkles, X } from "lucide-react";
 import { toast } from "sonner";
 import {
   Dialog,
@@ -23,6 +23,7 @@ import {
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { hexToRgb } from "@/lib/registry";
 import { createMedia, updateMedia } from "@/lib/api";
+import { extractYouTubeId } from "@/lib/embed";
 
 const DEFAULT = {
   title: "",
@@ -30,6 +31,7 @@ const DEFAULT = {
   sectionLabel: "",
   sourceType: "direct",
   sourceUrl: "",
+  posterUrl: "",
 };
 
 export default function MediaForm({
@@ -49,12 +51,21 @@ export default function MediaForm({
     sectionLabel: initial?.sectionLabel ?? defaultSection ?? sections?.[0] ?? "",
     sourceType: initial?.sourceType ?? DEFAULT.sourceType,
     sourceUrl: initial?.sourceUrl ?? DEFAULT.sourceUrl,
+    posterUrl: initial?.posterUrl ?? DEFAULT.posterUrl,
   }));
   const [errors, setErrors] = useState({});
   const [saving, setSaving] = useState(false);
   const rgb = hexToRgb(accentColor);
 
   const set = (k, v) => setForm((p) => ({ ...p, [k]: v }));
+
+  // If the current source is a YouTube URL, suggest its auto-thumbnail.
+  const ytId = form.sourceType === "embed" ? extractYouTubeId(form.sourceUrl) : null;
+  const suggestedPoster = ytId
+    ? `https://img.youtube.com/vi/${ytId}/hqdefault.jpg`
+    : null;
+  const canUseSuggestion =
+    !!suggestedPoster && form.posterUrl.trim() !== suggestedPoster;
 
   const validate = () => {
     const e = {};
@@ -63,6 +74,8 @@ export default function MediaForm({
     if (!form.sourceUrl.trim()) e.sourceUrl = "URL is required";
     else if (!/^https?:\/\//i.test(form.sourceUrl.trim()))
       e.sourceUrl = "Must start with http:// or https://";
+    if (form.posterUrl.trim() && !/^https?:\/\//i.test(form.posterUrl.trim()))
+      e.posterUrl = "Must start with http:// or https://";
     setErrors(e);
     return Object.keys(e).length === 0;
   };
@@ -78,6 +91,7 @@ export default function MediaForm({
         sectionLabel: form.sectionLabel,
         sourceType: form.sourceType,
         sourceUrl: form.sourceUrl.trim(),
+        posterUrl: form.posterUrl.trim() || null,
       };
       if (isEdit) {
         await updateMedia(profileId, initial.id, payload);
@@ -264,6 +278,71 @@ export default function MediaForm({
                 {errors.sourceUrl}
               </p>
             )}
+          </div>
+
+          {/* Poster image URL */}
+          <div>
+            <div className="flex items-baseline justify-between mb-2">
+              <Label className="text-[10px] uppercase tracking-[0.2em] text-white/40">
+                Poster image{" "}
+                <span className="normal-case tracking-normal text-white/30">
+                  (optional)
+                </span>
+              </Label>
+              {canUseSuggestion && (
+                <button
+                  type="button"
+                  data-testid="media-poster-use-youtube"
+                  onClick={() => set("posterUrl", suggestedPoster)}
+                  className="inline-flex items-center gap-1.5 text-[10px] uppercase tracking-[0.15em] text-[var(--p-color)] hover:opacity-80 transition-opacity"
+                >
+                  <Sparkles className="w-3 h-3" />
+                  Use YouTube thumbnail
+                </button>
+              )}
+            </div>
+            <div className="flex gap-2 items-start">
+              <div className="flex-1 min-w-0">
+                <Input
+                  data-testid="media-poster-url-input"
+                  value={form.posterUrl}
+                  onChange={(e) => set("posterUrl", e.target.value)}
+                  maxLength={2048}
+                  placeholder="https://images.example.com/poster.jpg"
+                  className="bg-[#0d0d12] border-white/10 text-white placeholder:text-white/25 font-mono text-xs focus-visible:ring-1 focus-visible:ring-[var(--p-color)] focus-visible:border-[var(--p-color)]"
+                />
+                {errors.posterUrl && (
+                  <p
+                    className="mt-1.5 text-xs text-[#F43F5E]"
+                    data-testid="media-poster-error"
+                  >
+                    {errors.posterUrl}
+                  </p>
+                )}
+              </div>
+              {form.posterUrl && (
+                <div className="relative shrink-0">
+                  <img
+                    src={form.posterUrl}
+                    alt=""
+                    data-testid="media-poster-preview"
+                    onError={(e) => {
+                      e.currentTarget.style.opacity = "0.2";
+                    }}
+                    className="w-16 h-10 rounded-md object-cover border border-white/10 bg-black"
+                  />
+                  <button
+                    type="button"
+                    data-testid="media-poster-clear"
+                    onClick={() => set("posterUrl", "")}
+                    className="absolute -top-2 -right-2 w-5 h-5 rounded-full bg-black/80 border border-white/15 flex items-center justify-center text-white/70 hover:text-white"
+                    aria-label="Clear poster"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
 
           <div className="flex items-center justify-end gap-2 pt-2 border-t border-white/[0.06]">

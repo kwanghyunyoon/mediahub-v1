@@ -190,6 +190,7 @@ export default function VideoPlayer({
               <video
                 data-testid="player-video"
                 src={source.src}
+                poster={media.posterUrl || undefined}
                 controls
                 autoPlay
                 playsInline

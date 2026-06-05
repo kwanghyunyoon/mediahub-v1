@@ -130,6 +130,7 @@ class MediaCreate(BaseModel):
     sectionLabel: str = Field(min_length=1, max_length=50)
     sourceType: Literal["direct", "embed"]
     sourceUrl: str = Field(min_length=1, max_length=2048)
+    posterUrl: Optional[str] = Field(default=None, max_length=2048)
 
     @field_validator('sourceUrl')
     @classmethod
@@ -139,6 +140,18 @@ class MediaCreate(BaseModel):
             raise ValueError('sourceUrl must start with http:// or https://')
         return v
 
+    @field_validator('posterUrl')
+    @classmethod
+    def _v_poster(cls, v):
+        if v is None:
+            return None
+        v = v.strip()
+        if not v:
+            return None
+        if not (v.startswith('http://') or v.startswith('https://')):
+            raise ValueError('posterUrl must start with http:// or https://')
+        return v
+
 
 class MediaUpdate(BaseModel):
     title: Optional[str] = Field(default=None, min_length=1, max_length=200)
@@ -146,6 +159,7 @@ class MediaUpdate(BaseModel):
     sectionLabel: Optional[str] = Field(default=None, min_length=1, max_length=50)
     sourceType: Optional[Literal["direct", "embed"]] = None
     sourceUrl: Optional[str] = Field(default=None, min_length=1, max_length=2048)
+    posterUrl: Optional[str] = Field(default=None, max_length=2048)
 
     @field_validator('sourceUrl')
     @classmethod
@@ -155,6 +169,19 @@ class MediaUpdate(BaseModel):
         v = v.strip()
         if not (v.startswith('http://') or v.startswith('https://')):
             raise ValueError('sourceUrl must start with http:// or https://')
+        return v
+
+    @field_validator('posterUrl')
+    @classmethod
+    def _v_poster(cls, v):
+        if v is None:
+            return None
+        v = v.strip()
+        if v == "":
+            # Treat empty string as "clear the poster"
+            return ""
+        if not (v.startswith('http://') or v.startswith('https://')):
+            raise ValueError('posterUrl must start with http:// or https://')
         return v
 
 
@@ -202,6 +229,7 @@ def _media_to_dict(doc: dict) -> dict:
         "sectionLabel": doc["sectionLabel"],
         "sourceType": doc["sourceType"],
         "sourceUrl": doc["sourceUrl"],
+        "posterUrl": doc.get("posterUrl"),
         "createdAt": doc.get("createdAt"),
         "updatedAt": doc.get("updatedAt"),
     }
@@ -329,6 +357,7 @@ async def create_media(profile_id: str, body: MediaCreate):
         "sectionLabel": body.sectionLabel.strip(),
         "sourceType": body.sourceType,
         "sourceUrl": body.sourceUrl,
+        "posterUrl": body.posterUrl,
         "createdAt": now,
         "updatedAt": now,
     }
@@ -350,6 +379,9 @@ async def update_media(profile_id: str, media_id: str, body: MediaUpdate):
             updates[str_field] = updates[str_field].strip()
     if "description" in updates:
         updates["description"] = (updates["description"] or "").strip() or None
+    # posterUrl: empty string from client means "clear the poster"
+    if "posterUrl" in updates and updates["posterUrl"] == "":
+        updates["posterUrl"] = None
     updates["updatedAt"] = _now_iso()
     await db.media.update_one(
         {"id": media_id, "profileId": profile_id}, {"$set": updates}
@@ -375,11 +407,52 @@ WESTERN_NAME = "Westwood Ranch"
 
 
 async def _seed_westwood_ranch() -> None:
-    """Create a richly themed example profile if it doesn't already exist."""
+    """Create a richly themed example profile if it doesn't already exist.
+    Also runs a one-shot poster backfill for any seeded items that lack one."""
+
+    # Title -> Unsplash poster URL. Used for both fresh seeding and backfill.
+    poster_by_title = {
+        "Showdown at High Noon":
+            "https://images.unsplash.com/photo-1502920514313-52581002a659?auto=format&fit=crop&w=900&q=70",
+        "The Lone Rider's Last Ride":
+            "https://images.unsplash.com/photo-1547753413-2cfdb1e0d2c1?auto=format&fit=crop&w=900&q=70",
+        "Saloon Doors Swing Open":
+            "https://images.unsplash.com/photo-1601758125946-6ec2ef64daf8?auto=format&fit=crop&w=900&q=70",
+        "Sunset on Monument Valley":
+            "https://images.unsplash.com/photo-1469854523086-cc02fe5d8800?auto=format&fit=crop&w=900&q=70",
+        "Cattle Drive Across the Plains":
+            "https://images.unsplash.com/photo-1500076656116-558758c991c1?auto=format&fit=crop&w=900&q=70",
+        "The Stagecoach Chase":
+            "https://images.unsplash.com/photo-1583195763986-0ed2fcedee49?auto=format&fit=crop&w=900&q=70",
+        "Whisper of the Coyote":
+            "https://images.unsplash.com/photo-1502082553048-f009c37129b9?auto=format&fit=crop&w=900&q=70",
+        "Campfire Songs":
+            "https://images.unsplash.com/photo-1525824236856-8c0a31dfe3be?auto=format&fit=crop&w=900&q=70",
+        "The Forgotten Trail":
+            "https://images.unsplash.com/photo-1473773508845-188df298d2d1?auto=format&fit=crop&w=900&q=70",
+    }
+
     existing = await db.profiles.find_one(
         {"name": WESTERN_NAME, "theme": "western"}, {"_id": 0, "id": 1}
     )
     if existing:
+        # Idempotent poster backfill — only fill items that don't have one yet.
+        existing_pid = existing["id"]
+        backfilled = 0
+        async for doc in db.media.find(
+            {"profileId": existing_pid, "$or": [
+                {"posterUrl": {"$exists": False}}, {"posterUrl": None}
+            ]},
+            {"_id": 0, "id": 1, "title": 1},
+        ):
+            url = poster_by_title.get(doc["title"])
+            if url:
+                await db.media.update_one(
+                    {"id": doc["id"]}, {"$set": {"posterUrl": url, "updatedAt": _now_iso()}}
+                )
+                backfilled += 1
+        if backfilled:
+            logger.info(f"Backfilled posters on {backfilled} Westwood Ranch media items.")
         return
 
     now = _now_iso()
@@ -447,6 +520,7 @@ async def _seed_westwood_ranch() -> None:
             "sectionLabel": section,
             "sourceType": src_type,
             "sourceUrl": src_url,
+            "posterUrl": poster_by_title.get(title),
             "createdAt": now,
             "updatedAt": now,
         })

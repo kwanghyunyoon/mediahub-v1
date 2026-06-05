@@ -60,6 +60,8 @@ function extractYouTubeId(url) {
   return null;
 }
 
+export { extractYouTubeId };
+
 function extractVimeoId(url) {
   try {
     const u = new URL(url);

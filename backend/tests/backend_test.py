@@ -477,6 +477,140 @@ class TestSeedIdempotent:
         assert len(rm.json()) == 9
 
 
+# ---------- Poster URL field (iter 5) ----------
+@pytest.fixture(scope="class")
+def poster_profile(request):
+    s = requests.Session()
+    payload = {
+        "name": "TEST_PosterProfile", "passcode": "5151",
+        "color": "#10b981", "icon": "Film", "sections": ["Movies"],
+    }
+    r = s.post(f"{API}/admin/profiles", json=payload, headers=ADMIN_HEADERS, timeout=10)
+    assert r.status_code == 200, r.text
+    pid = r.json()["id"]
+    request.cls.profile_id = pid
+    yield pid
+    try:
+        s.delete(f"{API}/admin/profiles/{pid}", headers=ADMIN_HEADERS, timeout=10)
+    except Exception:
+        pass
+
+
+@pytest.mark.usefixtures("poster_profile")
+class TestPosterUrl:
+    profile_id: str = ""
+
+    def test_create_without_poster_returns_null(self, session):
+        payload = {
+            "title": "NoPoster", "sectionLabel": "Movies",
+            "sourceType": "direct", "sourceUrl": "https://example.com/x.mp4",
+        }
+        r = session.post(f"{API}/profiles/{self.profile_id}/media", json=payload, headers=JSON_HEADERS, timeout=10)
+        assert r.status_code == 200, r.text
+        data = r.json()
+        assert "posterUrl" in data
+        assert data["posterUrl"] is None
+        # GET verifies persistence
+        rg = session.get(f"{API}/profiles/{self.profile_id}/media", timeout=10)
+        found = [m for m in rg.json() if m["id"] == data["id"]][0]
+        assert found["posterUrl"] is None
+
+    def test_create_with_valid_poster(self, session):
+        url = "https://images.unsplash.com/photo-1502920514313-52581002a659"
+        payload = {
+            "title": "WithPoster", "sectionLabel": "Movies",
+            "sourceType": "direct", "sourceUrl": "https://example.com/x.mp4",
+            "posterUrl": url,
+        }
+        r = session.post(f"{API}/profiles/{self.profile_id}/media", json=payload, headers=JSON_HEADERS, timeout=10)
+        assert r.status_code == 200, r.text
+        data = r.json()
+        assert data["posterUrl"] == url
+        TestPosterUrl.media_id = data["id"]
+
+    def test_create_with_empty_poster_treated_as_null(self, session):
+        payload = {
+            "title": "EmptyPoster", "sectionLabel": "Movies",
+            "sourceType": "direct", "sourceUrl": "https://example.com/x.mp4",
+            "posterUrl": "",
+        }
+        r = session.post(f"{API}/profiles/{self.profile_id}/media", json=payload, headers=JSON_HEADERS, timeout=10)
+        assert r.status_code == 200, r.text
+        assert r.json()["posterUrl"] is None
+
+    def test_create_with_invalid_poster_422(self, session):
+        payload = {
+            "title": "BadPoster", "sectionLabel": "Movies",
+            "sourceType": "direct", "sourceUrl": "https://example.com/x.mp4",
+            "posterUrl": "ftp://example.com/p.jpg",
+        }
+        r = session.post(f"{API}/profiles/{self.profile_id}/media", json=payload, headers=JSON_HEADERS, timeout=10)
+        assert r.status_code == 422
+
+    def test_update_poster_clear_via_empty_string(self, session):
+        mid = TestPosterUrl.media_id
+        # Clear it
+        r = session.put(
+            f"{API}/profiles/{self.profile_id}/media/{mid}",
+            json={"posterUrl": ""}, headers=JSON_HEADERS, timeout=10,
+        )
+        assert r.status_code == 200
+        assert r.json()["posterUrl"] is None
+        # Persisted
+        rg = session.get(f"{API}/profiles/{self.profile_id}/media", timeout=10)
+        found = [m for m in rg.json() if m["id"] == mid][0]
+        assert found["posterUrl"] is None
+
+    def test_update_poster_invalid_422(self, session):
+        mid = TestPosterUrl.media_id
+        r = session.put(
+            f"{API}/profiles/{self.profile_id}/media/{mid}",
+            json={"posterUrl": "notaurl"}, headers=JSON_HEADERS, timeout=10,
+        )
+        assert r.status_code == 422
+
+    def test_update_poster_set_new_value(self, session):
+        mid = TestPosterUrl.media_id
+        new_url = "https://images.example.com/poster2.jpg"
+        r = session.put(
+            f"{API}/profiles/{self.profile_id}/media/{mid}",
+            json={"posterUrl": new_url}, headers=JSON_HEADERS, timeout=10,
+        )
+        assert r.status_code == 200
+        assert r.json()["posterUrl"] == new_url
+
+
+# ---------- Westwood Ranch poster backfill (iter 5) ----------
+class TestWestwoodRanchPosters:
+    def test_all_9_items_have_posters(self, session):
+        r = session.get(f"{API}/admin/profiles", headers=ADMIN_HEADERS, timeout=10)
+        westwoods = [p for p in r.json() if p.get("name") == "Westwood Ranch" and p.get("theme") == "western"]
+        assert len(westwoods) == 1
+        pid = westwoods[0]["id"]
+        rm = session.get(f"{API}/profiles/{pid}/media", timeout=10)
+        assert rm.status_code == 200
+        items = rm.json()
+        assert len(items) == 9
+        missing = [m for m in items if not m.get("posterUrl")]
+        assert len(missing) == 0, f"Items missing posterUrl: {[m['title'] for m in missing]}"
+        # All should be https unsplash URLs
+        for m in items:
+            assert m["posterUrl"].startswith("https://images.unsplash.com/"), m["posterUrl"]
+
+    def test_backfill_is_idempotent(self, session):
+        """After previous TestSeedIdempotent re-ran the seed twice, posters
+        should still all be present (idempotent backfill — no clearing/dupe)."""
+        r = session.get(f"{API}/admin/profiles", headers=ADMIN_HEADERS, timeout=10)
+        westwoods = [p for p in r.json() if p.get("name") == "Westwood Ranch" and p.get("theme") == "western"]
+        assert len(westwoods) == 1
+        pid = westwoods[0]["id"]
+        rm = session.get(f"{API}/profiles/{pid}/media", timeout=10)
+        items = rm.json()
+        assert len(items) == 9
+        missing = [m for m in items if not m.get("posterUrl")]
+        assert len(missing) == 0
+
+
 # ---------- Cascade delete ----------
 class TestCascadeDelete:
     def test_delete_profile_removes_media_and_returns_404(self, session):
