@@ -81,6 +81,13 @@ Build the foundation of a personal media hub web app called MediaHub. React fron
 - `VideoPlayer` `<video>` element receives `poster={media.posterUrl}` for direct items
 - Tested: 43/43 backend + 10/10 frontend review items passing
 
+### Drag-reorder + theme selector + 2 new presets — iteration 6 (2026-02)
+- Media `order: int` field added; `POST /api/profiles/{id}/media/reorder` endpoint (`{sectionLabel, mediaIds}` → assigns order=0..N); idempotent startup backfill for legacy items; list query sorts by `(sectionLabel, order, createdAt)`
+- `@dnd-kit/core` + `@dnd-kit/sortable` integrated. Sections in `ProfileForm` are now a vertical sortable list (grip handle per row); media items in each section grid use `rectSortingStrategy` with PointerSensor distance=8 so simple clicks still open the player
+- New `ProfileForm` Theme picker (4 cards): `default`, `western`, `neon` (Neon Arcade), `studio` (Studio Loft); persisted on save
+- New `ProfileShell` rendering for `neon` (cyber-magenta + cyan glow on serif-shadow headings, grid backdrop) and `studio` (warm monochrome backdrop, italic serif headings via DM Serif Display)
+- Tested: 55/55 backend (incl. TestMediaOrderAndReorder, TestWestwoodOrderBackfill, TestNewThemes) + all 10 frontend review items passing
+
 ## Backlog (Future Phases)
 **P0 — content layer**
 - Media content modules per section (e.g., movie lists, music playlists, books, notes)
