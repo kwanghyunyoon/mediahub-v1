@@ -7,7 +7,7 @@ import { getIcon, hexToRgb } from "@/lib/registry";
 import { listMedia } from "@/lib/api";
 import MediaCard from "@/components/MediaCard";
 import MediaForm from "@/components/MediaForm";
-import MediaDetailsDialog from "@/components/MediaDetailsDialog";
+import VideoPlayer from "@/components/VideoPlayer";
 
 export default function ProfileShell() {
   const { id } = useParams();
@@ -21,7 +21,7 @@ export default function ProfileShell() {
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState(null); // media object when editing
   const [defaultSection, setDefaultSection] = useState(null);
-  const [details, setDetails] = useState(null);
+  const [playing, setPlaying] = useState(null); // media object currently in player
 
   useEffect(() => {
     const raw = sessionStorage.getItem(`mh_profile_${id}`);
@@ -260,7 +260,7 @@ export default function ProfileShell() {
                         media={m}
                         accentColor={profile.color}
                         index={idx}
-                        onClick={setDetails}
+                        onClick={setPlaying}
                       />
                     ))}
                   </div>
@@ -291,15 +291,14 @@ export default function ProfileShell() {
         />
       )}
 
-      {/* Details dialog */}
-      <MediaDetailsDialog
-        open={!!details}
-        onOpenChange={(o) => !o && setDetails(null)}
-        media={details}
+      {/* Fullscreen in-app video player */}
+      <VideoPlayer
+        media={playing}
         profileId={profile.id}
         accentColor={profile.color}
+        onClose={() => setPlaying(null)}
         onEdit={(m) => {
-          setDetails(null);
+          setPlaying(null);
           openEdit(m);
         }}
         onDeleted={refresh}
