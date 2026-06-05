@@ -1,34 +1,40 @@
-.App-logo {
-    height: 40vmin;
+.App {
+    font-family: "Manrope", "Inter", -apple-system, BlinkMacSystemFont, sans-serif;
+    color-scheme: dark;
+}
+
+/* Cinematic subtle grain on dark backgrounds */
+.App::before {
+    content: "";
+    position: fixed;
+    inset: 0;
     pointer-events: none;
+    z-index: 0;
+    opacity: 0.04;
+    mix-blend-mode: overlay;
+    background-image:
+        radial-gradient(rgba(255, 255, 255, 0.7) 1px, transparent 1px);
+    background-size: 3px 3px;
 }
 
-@media (prefers-reduced-motion: no-preference) {
-    .App-logo {
-        animation: App-logo-spin infinite 20s linear;
-    }
+/* Custom thin scrollbar for dark theme */
+::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+::-webkit-scrollbar-track {
+    background: transparent;
+}
+::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.15);
 }
 
-.App-header {
-    background-color: #0f0f10;
-    min-height: 100vh;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    font-size: calc(10px + 2vmin);
-    color: white;
-}
-
-.App-link {
-    color: #61dafb;
-}
-
-@keyframes App-logo-spin {
-    from {
-        transform: rotate(0deg);
-    }
-    to {
-        transform: rotate(360deg);
-    }
+/* Selection */
+::selection {
+    background: rgba(225, 29, 72, 0.35);
+    color: #fff;
 }
