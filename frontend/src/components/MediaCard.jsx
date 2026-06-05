@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { motion } from "framer-motion";
 import { Youtube, Video, Link2, MoreHorizontal } from "lucide-react";
 import { hexToRgb } from "@/lib/registry";
@@ -45,7 +46,8 @@ const SourceBadge = ({ media, color, withPoster }) => {
 
 export default function MediaCard({ media, accentColor, index = 0, onClick }) {
   const rgb = hexToRgb(accentColor);
-  const hasPoster = !!media.posterUrl;
+  const [posterOk, setPosterOk] = useState(false);
+  const showPoster = !!media.posterUrl && posterOk;
 
   return (
     <motion.button
@@ -67,20 +69,25 @@ export default function MediaCard({ media, accentColor, index = 0, onClick }) {
     >
       {/* Visual band — poster image if available, otherwise color wash */}
       <div className="relative aspect-[16/10] w-full overflow-hidden bg-[#0a0a0d]">
-        {hasPoster ? (
+        {/* Always render <img> if posterUrl present so the testid stays addressable */}
+        {media.posterUrl && (
+          <img
+            data-testid={`media-poster-${media.id}`}
+            src={media.posterUrl}
+            alt=""
+            loading="lazy"
+            draggable={false}
+            onLoad={() => setPosterOk(true)}
+            onError={(e) => {
+              setPosterOk(false);
+              e.currentTarget.style.display = "none";
+            }}
+            className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 ease-out group-hover:scale-105"
+          />
+        )}
+
+        {showPoster ? (
           <>
-            <img
-              data-testid={`media-poster-${media.id}`}
-              src={media.posterUrl}
-              alt=""
-              loading="lazy"
-              draggable={false}
-              onError={(e) => {
-                // Hide the broken image so the underlying dark wash shows
-                e.currentTarget.style.display = "none";
-              }}
-              className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 ease-out group-hover:scale-105"
-            />
             {/* Bottom-up darken gradient so the title sits cleanly */}
             <div
               aria-hidden
@@ -117,7 +124,7 @@ export default function MediaCard({ media, accentColor, index = 0, onClick }) {
         )}
 
         <div className="absolute top-3 left-3">
-          <SourceBadge media={media} color={accentColor} withPoster={hasPoster} />
+          <SourceBadge media={media} color={accentColor} withPoster={showPoster} />
         </div>
         <div className="absolute bottom-3 right-3">
           <span className="w-8 h-8 rounded-full bg-black/45 backdrop-blur-md flex items-center justify-center text-white/75 group-hover:text-white border border-white/15 transition-colors">

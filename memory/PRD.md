@@ -73,6 +73,14 @@ Build the foundation of a personal media hub web app called MediaHub. React fron
 - App-wide page transitions via `AnimatePresence` (fade + tiny rise) on every route
 - Tested: 34/34 backend + all 12 frontend review items passing
 
+### Media poster artwork — iteration 5 (2026-02)
+- `posterUrl` optional field added to MediaCreate/MediaUpdate (validated http(s)); empty string on update clears it
+- Startup re-runs as an **idempotent backfill**: scans Westwood Ranch media missing `posterUrl` and assigns themed Unsplash images from a per-title map
+- `MediaForm` gains a Poster URL input + live preview thumbnail + clear button; when the source is a YouTube URL a "Use YouTube thumbnail" helper auto-fills `img.youtube.com/vi/{id}/hqdefault.jpg`
+- `MediaCard` renders the poster as the visual band with a bottom-up dark gradient + accent vignette so titles stay legible; badge gets a dark glass treatment over photos; `onLoad`/`onError` tracking means **broken posters fall back to the original color-wash** cleanly
+- `VideoPlayer` `<video>` element receives `poster={media.posterUrl}` for direct items
+- Tested: 43/43 backend + 10/10 frontend review items passing
+
 ## Backlog (Future Phases)
 **P0 — content layer**
 - Media content modules per section (e.g., movie lists, music playlists, books, notes)
