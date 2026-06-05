@@ -65,6 +65,14 @@ Build the foundation of a personal media hub web app called MediaHub. React fron
 - Edit / Delete actions live in the player top bar (Delete behind confirmation dialog)
 - Tested: 28/28 backend + 45/45 frontend assertions passing
 
+### Westwood Ranch theme + global polish — iteration 4 (2026-02)
+- Profile model now carries an optional `theme` field (default `"default"`)
+- Startup seed `_seed_westwood_ranch()` idempotently creates one example profile (`name='Westwood Ranch'`, `theme='western'`, passcode `1976`, color `#C2410C`, icon `Crown`) with 9 placeholder media items (3 per section across Best Moments / Classic Scenes / Hidden Gems, mix of direct + YouTube embed)
+- New rugged-western look in `ProfileShell`: cinematic wide hero banner with desert canyon image, serif "Westwood / *Ranch*" title (Playfair Display + italic accent), earthy palette (burnt orange #C2410C, warm tan #D4A574, cream #F5E6D3), subtle wood-grain gradient background
+- Section headings auto-swap to Playfair Display when `data-theme="western"`; non-western profiles continue to use Outfit sans-serif
+- App-wide page transitions via `AnimatePresence` (fade + tiny rise) on every route
+- Tested: 34/34 backend + all 12 frontend review items passing
+
 ## Backlog (Future Phases)
 **P0 — content layer**
 - Media content modules per section (e.g., movie lists, music playlists, books, notes)
