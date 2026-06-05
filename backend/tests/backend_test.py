@@ -167,3 +167,214 @@ class TestProfileCRUD:
         pid = TestProfileCRUD.created_id
         r = session.post(f"{API}/profiles/{pid}/verify", json={"passcode": "1234"}, timeout=10)
         assert r.status_code == 404
+
+
+# ---------- Media CRUD ----------
+@pytest.fixture(scope="class")
+def media_profile(request):
+    """Create a profile with sections for media tests; cleanup after."""
+    s = requests.Session()
+    payload = {
+        "name": "TEST_MediaProfile",
+        "passcode": "5678",
+        "color": "#3b82f6",
+        "icon": "Film",
+        "sections": ["Movies", "Music", "Podcasts"],
+    }
+    r = s.post(f"{API}/admin/profiles", json=payload, headers=ADMIN_HEADERS, timeout=10)
+    assert r.status_code == 200, r.text
+    pid = r.json()["id"]
+    request.cls.profile_id = pid
+    yield pid
+    try:
+        s.delete(f"{API}/admin/profiles/{pid}", headers=ADMIN_HEADERS, timeout=10)
+    except Exception:
+        pass
+
+
+@pytest.mark.usefixtures("media_profile")
+class TestMediaCRUD:
+    profile_id: str = ""
+
+    def test_01_list_empty_for_new_profile(self, session):
+        r = session.get(f"{API}/profiles/{self.profile_id}/media", timeout=10)
+        assert r.status_code == 200
+        assert r.json() == []
+
+    def test_02_list_404_for_unknown_profile(self, session):
+        r = session.get(f"{API}/profiles/does-not-exist-xyz/media", timeout=10)
+        assert r.status_code == 404
+
+    def test_03_create_direct_media(self, session):
+        payload = {
+            "title": "Big Buck Bunny",
+            "description": "Open-source short film",
+            "sectionLabel": "Movies",
+            "sourceType": "direct",
+            "sourceUrl": "https://example.com/bbb.mp4",
+        }
+        r = session.post(
+            f"{API}/profiles/{self.profile_id}/media",
+            json=payload, headers=JSON_HEADERS, timeout=10,
+        )
+        assert r.status_code == 200, r.text
+        data = r.json()
+        assert data["title"] == "Big Buck Bunny"
+        assert data["description"] == "Open-source short film"
+        assert data["sectionLabel"] == "Movies"
+        assert data["sourceType"] == "direct"
+        assert data["sourceUrl"] == "https://example.com/bbb.mp4"
+        assert "id" in data and isinstance(data["id"], str)
+        assert data["profileId"] == self.profile_id
+        TestMediaCRUD.direct_id = data["id"]
+
+        # Verify via GET (persistence)
+        r2 = session.get(f"{API}/profiles/{self.profile_id}/media", timeout=10)
+        ids = [m["id"] for m in r2.json()]
+        assert data["id"] in ids
+
+    def test_04_create_embed_media(self, session):
+        payload = {
+            "title": "Cool Talk",
+            "sectionLabel": "Podcasts",
+            "sourceType": "embed",
+            "sourceUrl": "https://www.youtube.com/embed/dQw4w9WgXcQ",
+        }
+        r = session.post(
+            f"{API}/profiles/{self.profile_id}/media",
+            json=payload, headers=JSON_HEADERS, timeout=10,
+        )
+        assert r.status_code == 200, r.text
+        data = r.json()
+        assert data["sourceType"] == "embed"
+        assert data["description"] is None  # optional, not provided
+        TestMediaCRUD.embed_id = data["id"]
+
+    def test_05_reject_non_http_url_422(self, session):
+        payload = {
+            "title": "Bad", "sectionLabel": "Movies",
+            "sourceType": "direct", "sourceUrl": "ftp://example.com/x.mp4",
+        }
+        r = session.post(
+            f"{API}/profiles/{self.profile_id}/media",
+            json=payload, headers=JSON_HEADERS, timeout=10,
+        )
+        assert r.status_code == 422
+
+    def test_06_reject_bad_source_type_422(self, session):
+        payload = {
+            "title": "Bad", "sectionLabel": "Movies",
+            "sourceType": "magnet", "sourceUrl": "https://example.com/x.mp4",
+        }
+        r = session.post(
+            f"{API}/profiles/{self.profile_id}/media",
+            json=payload, headers=JSON_HEADERS, timeout=10,
+        )
+        assert r.status_code == 422
+
+    def test_07_reject_empty_title_422(self, session):
+        payload = {
+            "title": "", "sectionLabel": "Movies",
+            "sourceType": "direct", "sourceUrl": "https://example.com/x.mp4",
+        }
+        r = session.post(
+            f"{API}/profiles/{self.profile_id}/media",
+            json=payload, headers=JSON_HEADERS, timeout=10,
+        )
+        assert r.status_code == 422
+
+    def test_08_reject_empty_section_422(self, session):
+        payload = {
+            "title": "Ok", "sectionLabel": "",
+            "sourceType": "direct", "sourceUrl": "https://example.com/x.mp4",
+        }
+        r = session.post(
+            f"{API}/profiles/{self.profile_id}/media",
+            json=payload, headers=JSON_HEADERS, timeout=10,
+        )
+        assert r.status_code == 422
+
+    def test_09_create_on_unknown_profile_404(self, session):
+        payload = {
+            "title": "Ok", "sectionLabel": "Movies",
+            "sourceType": "direct", "sourceUrl": "https://example.com/x.mp4",
+        }
+        r = session.post(
+            f"{API}/profiles/missing-profile-id/media",
+            json=payload, headers=JSON_HEADERS, timeout=10,
+        )
+        assert r.status_code == 404
+
+    def test_10_partial_update_preserves_others(self, session):
+        mid = TestMediaCRUD.direct_id
+        r = session.put(
+            f"{API}/profiles/{self.profile_id}/media/{mid}",
+            json={"title": "Big Buck Bunny (HD)"},
+            headers=JSON_HEADERS, timeout=10,
+        )
+        assert r.status_code == 200, r.text
+        data = r.json()
+        assert data["title"] == "Big Buck Bunny (HD)"
+        # Preserved
+        assert data["sectionLabel"] == "Movies"
+        assert data["sourceType"] == "direct"
+        assert data["sourceUrl"] == "https://example.com/bbb.mp4"
+        assert data["description"] == "Open-source short film"
+
+    def test_11_update_unknown_media_404(self, session):
+        r = session.put(
+            f"{API}/profiles/{self.profile_id}/media/nonexistent-id",
+            json={"title": "Whatever"},
+            headers=JSON_HEADERS, timeout=10,
+        )
+        assert r.status_code == 404
+
+    def test_12_delete_media_then_404(self, session):
+        mid = TestMediaCRUD.embed_id
+        r = session.delete(
+            f"{API}/profiles/{self.profile_id}/media/{mid}", timeout=10
+        )
+        assert r.status_code == 200
+        # subsequent GET excludes it
+        r2 = session.get(f"{API}/profiles/{self.profile_id}/media", timeout=10)
+        ids = [m["id"] for m in r2.json()]
+        assert mid not in ids
+        # delete again -> 404
+        r3 = session.delete(
+            f"{API}/profiles/{self.profile_id}/media/{mid}", timeout=10
+        )
+        assert r3.status_code == 404
+
+
+# ---------- Cascade delete ----------
+class TestCascadeDelete:
+    def test_delete_profile_removes_media_and_returns_404(self, session):
+        # Create dedicated profile
+        payload = {
+            "name": "TEST_CascadeProfile", "passcode": "9999",
+            "color": "#f59e0b", "icon": "Music", "sections": ["S1"],
+        }
+        r = session.post(f"{API}/admin/profiles", json=payload, headers=ADMIN_HEADERS, timeout=10)
+        assert r.status_code == 200
+        pid = r.json()["id"]
+
+        # Add 2 media items
+        for i in range(2):
+            mp = {
+                "title": f"M{i}", "sectionLabel": "S1",
+                "sourceType": "direct", "sourceUrl": f"https://example.com/{i}.mp4",
+            }
+            rr = session.post(f"{API}/profiles/{pid}/media", json=mp, headers=JSON_HEADERS, timeout=10)
+            assert rr.status_code == 200
+
+        # Sanity
+        rg = session.get(f"{API}/profiles/{pid}/media", timeout=10)
+        assert rg.status_code == 200 and len(rg.json()) == 2
+
+        # Delete profile (cascade)
+        rd = session.delete(f"{API}/admin/profiles/{pid}", headers=ADMIN_HEADERS, timeout=10)
+        assert rd.status_code == 200
+
+        # GET media -> 404 (profile gone)
+        rg2 = session.get(f"{API}/profiles/{pid}/media", timeout=10)
+        assert rg2.status_code == 404

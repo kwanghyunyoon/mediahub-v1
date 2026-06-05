@@ -51,4 +51,25 @@ export const adminDeleteProfile = async (id) => {
   return data;
 };
 
+// --- Media ---
+export const listMedia = async (profileId) => {
+  const { data } = await api.get(`/profiles/${profileId}/media`);
+  return data;
+};
+
+export const createMedia = async (profileId, payload) => {
+  const { data } = await api.post(`/profiles/${profileId}/media`, payload);
+  return data;
+};
+
+export const updateMedia = async (profileId, mediaId, payload) => {
+  const { data } = await api.put(`/profiles/${profileId}/media/${mediaId}`, payload);
+  return data;
+};
+
+export const deleteMedia = async (profileId, mediaId) => {
+  const { data } = await api.delete(`/profiles/${profileId}/media/${mediaId}`);
+  return data;
+};
+
 export default api;

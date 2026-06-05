@@ -1,0 +1,26 @@
+{
+  "summary": "Iteration 2 media layer fully verified. Backend pytest 28/28 passed (15 from iter 1 still green + 13 new media tests). Frontend Playwright e2e covered every flow in the review request: section tabs + per-section empty states, MediaForm validation (empty title/url, non-http url), direct create, embed/YouTube create with YouTube badge, section filter pills, MediaDetailsDialog (title/desc/source, no player), edit-in-place, delete confirmation, inline section-add preselect, and no-sections empty state with disabled Add button.",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": { "ui_bugs": [], "integration_issues": [], "design_issues": [] },
+  "test_report_links": [
+    "/app/backend/tests/backend_test.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py still uses deprecated @app.on_event('shutdown'); migrate to FastAPI lifespan handlers (carried over from iter 1).",
+    "Optional: add a Mongo index on media.profileId (and compound (profileId,id)) once item counts grow; current queries are profile-scoped and fine for MVP.",
+    "MediaForm dialog hides the title-error/url-error only after the next validate() pass; minor UX nit — fields don't clear errors on typing. Acceptable for MVP.",
+    "list_media's 2000-doc cap is safe per profile for now but worth paginating later."
+  ],
+  "updated_files": [
+    "/app/backend/tests/backend_test.py"
+  ],
+  "success_rate": { "backend": "100% (28/28)", "frontend": "100% (13/13 scenarios)" },
+  "test_credentials": "Master admin passcode: 1115. Test profile passcodes 4242 / 0001. /app/memory/test_credentials.md not present (no user auth in this MVP).",
+  "seed_data_creation": "Each Playwright run creates TEST_PWMedia* + TEST_PWNoSec profiles via /api/admin/profiles and deletes them in finally{} (cascade also removes any leftover media). Backend tests use TEST_ prefix with module teardown that nukes any stragglers.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend tests live at /app/backend/tests/backend_test.py — new classes: TestMediaCRUD (list-empty/404, direct+embed create, url/type/title/section 422 validation, partial update preserves untouched, delete then 404) and TestCascadeDelete (admin profile delete also wipes media; subsequent GET media -> 404). Frontend e2e bypasses the passcode dialog by POSTing /api/admin/profiles with header X-Admin-Passcode: 1115, then injecting sessionStorage key mh_profile_{id} before goto /profile/{id}. IMPORTANT: a Cloudflare WAF rule blocks bare urllib without a browser UA — always set User-Agent: Mozilla/... when hitting the public preview from scripts. Also wait for the profile-media-loading element to disappear (or media-empty-{label} to appear) before asserting empty-state UI — the GET /media is async after first render. shadcn Select for sectionLabel works fine: click media-section-trigger then media-section-option-{label} with force=True.",
+  "rca of the issue": "N/A — no bugs found in iteration 2."
+}

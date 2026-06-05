@@ -7,7 +7,7 @@ import logging
 import re
 from pathlib import Path
 from pydantic import BaseModel, Field, ConfigDict, field_validator
-from typing import List, Optional
+from typing import List, Optional, Literal
 import uuid
 from datetime import datetime, timezone
 
@@ -121,6 +121,40 @@ class AdminVerify(BaseModel):
     passcode: str
 
 
+class MediaCreate(BaseModel):
+    title: str = Field(min_length=1, max_length=200)
+    description: Optional[str] = Field(default=None, max_length=2000)
+    sectionLabel: str = Field(min_length=1, max_length=50)
+    sourceType: Literal["direct", "embed"]
+    sourceUrl: str = Field(min_length=1, max_length=2048)
+
+    @field_validator('sourceUrl')
+    @classmethod
+    def _v_url(cls, v: str) -> str:
+        v = v.strip()
+        if not (v.startswith('http://') or v.startswith('https://')):
+            raise ValueError('sourceUrl must start with http:// or https://')
+        return v
+
+
+class MediaUpdate(BaseModel):
+    title: Optional[str] = Field(default=None, min_length=1, max_length=200)
+    description: Optional[str] = Field(default=None, max_length=2000)
+    sectionLabel: Optional[str] = Field(default=None, min_length=1, max_length=50)
+    sourceType: Optional[Literal["direct", "embed"]] = None
+    sourceUrl: Optional[str] = Field(default=None, min_length=1, max_length=2048)
+
+    @field_validator('sourceUrl')
+    @classmethod
+    def _v_url(cls, v):
+        if v is None:
+            return v
+        v = v.strip()
+        if not (v.startswith('http://') or v.startswith('https://')):
+            raise ValueError('sourceUrl must start with http:// or https://')
+        return v
+
+
 # ---------- Helpers ----------
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -152,6 +186,26 @@ def _to_admin(doc: dict) -> dict:
 def _require_admin(x_admin_passcode: Optional[str]) -> None:
     if not x_admin_passcode or x_admin_passcode != MASTER_PASSCODE:
         raise HTTPException(status_code=401, detail="Invalid admin passcode")
+
+
+def _media_to_dict(doc: dict) -> dict:
+    return {
+        "id": doc["id"],
+        "profileId": doc["profileId"],
+        "title": doc["title"],
+        "description": doc.get("description"),
+        "sectionLabel": doc["sectionLabel"],
+        "sourceType": doc["sourceType"],
+        "sourceUrl": doc["sourceUrl"],
+        "createdAt": doc.get("createdAt"),
+        "updatedAt": doc.get("updatedAt"),
+    }
+
+
+async def _ensure_profile_exists(profile_id: str) -> None:
+    exists = await db.profiles.find_one({"id": profile_id}, {"_id": 0, "id": 1})
+    if not exists:
+        raise HTTPException(status_code=404, detail="Profile not found")
 
 
 # ---------- Routes ----------
@@ -243,7 +297,69 @@ async def delete_profile(
     result = await db.profiles.delete_one({"id": profile_id})
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Profile not found")
+    # Cascade: remove all media items belonging to this profile
+    await db.media.delete_many({"profileId": profile_id})
     return {"ok": True, "deleted": profile_id}
+
+
+# --- Media routes (scoped by profile) ---
+@api_router.get("/profiles/{profile_id}/media")
+async def list_media(profile_id: str):
+    await _ensure_profile_exists(profile_id)
+    cursor = db.media.find({"profileId": profile_id}, {"_id": 0}).sort("createdAt", 1)
+    docs = await cursor.to_list(2000)
+    return [_media_to_dict(d) for d in docs]
+
+
+@api_router.post("/profiles/{profile_id}/media")
+async def create_media(profile_id: str, body: MediaCreate):
+    await _ensure_profile_exists(profile_id)
+    now = _now_iso()
+    doc = {
+        "id": str(uuid.uuid4()),
+        "profileId": profile_id,
+        "title": body.title.strip(),
+        "description": (body.description or "").strip() or None,
+        "sectionLabel": body.sectionLabel.strip(),
+        "sourceType": body.sourceType,
+        "sourceUrl": body.sourceUrl,
+        "createdAt": now,
+        "updatedAt": now,
+    }
+    await db.media.insert_one(doc)
+    doc.pop("_id", None)
+    return _media_to_dict(doc)
+
+
+@api_router.put("/profiles/{profile_id}/media/{media_id}")
+async def update_media(profile_id: str, media_id: str, body: MediaUpdate):
+    existing = await db.media.find_one(
+        {"id": media_id, "profileId": profile_id}, {"_id": 0}
+    )
+    if not existing:
+        raise HTTPException(status_code=404, detail="Media not found")
+    updates = {k: v for k, v in body.model_dump(exclude_unset=True).items() if v is not None}
+    for str_field in ("title", "sectionLabel"):
+        if str_field in updates:
+            updates[str_field] = updates[str_field].strip()
+    if "description" in updates:
+        updates["description"] = (updates["description"] or "").strip() or None
+    updates["updatedAt"] = _now_iso()
+    await db.media.update_one(
+        {"id": media_id, "profileId": profile_id}, {"$set": updates}
+    )
+    doc = await db.media.find_one(
+        {"id": media_id, "profileId": profile_id}, {"_id": 0}
+    )
+    return _media_to_dict(doc)
+
+
+@api_router.delete("/profiles/{profile_id}/media/{media_id}")
+async def delete_media(profile_id: str, media_id: str):
+    result = await db.media.delete_one({"id": media_id, "profileId": profile_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Media not found")
+    return {"ok": True, "deleted": media_id}
 
 
 app.include_router(api_router)
