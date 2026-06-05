@@ -45,6 +45,16 @@ Build the foundation of a personal media hub web app called MediaHub. React fron
 - All interactive/critical elements carry `data-testid`
 - Tested: 15/15 backend tests + 13/13 frontend Playwright scenarios passing
 
+### Media library — iteration 2 (2026-02)
+- Backend media model + endpoints: `GET/POST /api/profiles/{id}/media`, `PUT/DELETE /api/profiles/{id}/media/{mediaId}`
+- Per-item fields: `title`, optional `description`, `sectionLabel`, `sourceType` (direct|embed), `sourceUrl` (validated http(s))
+- Cascade: deleting a profile also deletes its media
+- ProfileShell now renders media grouped by section label with section filter pills (incl. "All"), per-section empty states, and inline "+ Add" per section
+- MediaForm with title/description/section dropdown/source-type radio/url field
+- MediaCard with source-type badge (Direct / YouTube / Vimeo / Embed) and color-tinted hover glow
+- MediaDetailsDialog (details-only — no player yet) with Edit + Delete (with confirmation)
+- Tested: 28/28 backend + 13/13 frontend e2e scenarios passing
+
 ## Backlog (Future Phases)
 **P0 — content layer**
 - Media content modules per section (e.g., movie lists, music playlists, books, notes)
