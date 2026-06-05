@@ -184,7 +184,6 @@ export default function VideoPlayer({
                 sandbox="allow-scripts allow-same-origin allow-presentation"
                 referrerPolicy="strict-origin"
                 allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
-                allowFullScreen
                 className="w-full h-full border-0 bg-black"
               />
             ) : (

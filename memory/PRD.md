@@ -55,6 +55,16 @@ Build the foundation of a personal media hub web app called MediaHub. React fron
 - MediaDetailsDialog (details-only — no player yet) with Edit + Delete (with confirmation)
 - Tested: 28/28 backend + 13/13 frontend e2e scenarios passing
 
+### In-app video player — iteration 3 (2026-02)
+- Fullscreen overlay (`VideoPlayer`) opens on card click — MediaDetailsDialog removed
+- `parseSource` normalises YouTube to `youtube-nocookie.com/embed/{id}` and Vimeo to `player.vimeo.com/video/{id}` with strict params
+- Direct: native HTML5 `<video>` with `controlsList="nodownload noremoteplayback noplaybackrate"`, right-click suppressed, no PiP
+- Embed: `<iframe sandbox="allow-scripts allow-same-origin allow-presentation">` — no `allow-popups`, no `allow-top-navigation` → "Watch on YouTube" and any external nav is browser-blocked
+- Visual click-shields overlay branding/title-bar corners as a second layer
+- ESC closes, body scroll locked while open, no `<a>` tags in overlay
+- Edit / Delete actions live in the player top bar (Delete behind confirmation dialog)
+- Tested: 28/28 backend + 45/45 frontend assertions passing
+
 ## Backlog (Future Phases)
 **P0 — content layer**
 - Media content modules per section (e.g., movie lists, music playlists, books, notes)
