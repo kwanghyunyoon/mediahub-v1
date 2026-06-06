@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { Save, Plus, Sparkles, X } from "lucide-react";
+import { Save, Plus, Sparkles, X, Wand2 } from "lucide-react";
 import { toast } from "sonner";
 import {
   Dialog,
@@ -22,7 +22,7 @@ import {
 } from "@/components/ui/select";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { hexToRgb } from "@/lib/registry";
-import { createMedia, updateMedia } from "@/lib/api";
+import { createMedia, updateMedia, oembedLookup } from "@/lib/api";
 import { extractYouTubeId } from "@/lib/embed";
 
 const DEFAULT = {
@@ -55,9 +55,37 @@ export default function MediaForm({
   }));
   const [errors, setErrors] = useState({});
   const [saving, setSaving] = useState(false);
+  const [fetching, setFetching] = useState(false);
   const rgb = hexToRgb(accentColor);
 
   const set = (k, v) => setForm((p) => ({ ...p, [k]: v }));
+
+  // Is the current source URL eligible for oEmbed metadata fetch?
+  const canFetchMeta =
+    form.sourceType === "embed" &&
+    /^(https?:\/\/)?(www\.)?(youtube\.com|youtu\.be|vimeo\.com|player\.vimeo\.com)/i.test(
+      form.sourceUrl.trim()
+    );
+
+  const handleFetchMeta = async () => {
+    if (!canFetchMeta || fetching) return;
+    setFetching(true);
+    try {
+      const data = await oembedLookup(form.sourceUrl.trim());
+      // Only fill empty fields — never overwrite something the user already typed.
+      setForm((p) => ({
+        ...p,
+        title: p.title.trim() || data.title || p.title,
+        description: p.description.trim() || data.description || p.description,
+        posterUrl: p.posterUrl.trim() || data.thumbnail_url || p.posterUrl,
+      }));
+      toast.success("Metadata loaded");
+    } catch (err) {
+      toast.error("Could not fetch metadata");
+    } finally {
+      setFetching(false);
+    }
+  };
 
   // If the current source is a YouTube URL, suggest its auto-thumbnail.
   const ytId = form.sourceType === "embed" ? extractYouTubeId(form.sourceUrl) : null;
@@ -258,9 +286,23 @@ export default function MediaForm({
 
           {/* Source URL */}
           <div>
-            <Label className="text-[10px] uppercase tracking-[0.2em] text-white/40 mb-2 block">
-              {form.sourceType === "direct" ? "Video URL" : "Embed URL"}
-            </Label>
+            <div className="flex items-baseline justify-between mb-2">
+              <Label className="text-[10px] uppercase tracking-[0.2em] text-white/40">
+                {form.sourceType === "direct" ? "Video URL" : "Embed URL"}
+              </Label>
+              {canFetchMeta && (
+                <button
+                  type="button"
+                  data-testid="media-fetch-meta-btn"
+                  onClick={handleFetchMeta}
+                  disabled={fetching}
+                  className="inline-flex items-center gap-1.5 text-[10px] uppercase tracking-[0.15em] text-[var(--p-color)] hover:opacity-80 transition-opacity disabled:opacity-40"
+                >
+                  <Wand2 className="w-3 h-3" />
+                  {fetching ? "Fetching…" : "Fetch from URL"}
+                </button>
+              )}
+            </div>
             <Input
               data-testid="media-source-url-input"
               value={form.sourceUrl}

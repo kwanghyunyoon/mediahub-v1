@@ -1,3 +1,22 @@
+"""
+MediaHub backend — single-file FastAPI app.
+
+LAYOUT (top to bottom):
+  1. Imports + env + Mongo client
+  2. lifespan handler (idempotent seed + backfills on startup)
+  3. Rate limiter (in-memory) for the two passcode-verify endpoints
+  4. Per-profile passcode dependency (gates the media endpoints)
+  5. Pydantic models (Profile, Media, Reorder bodies)
+  6. Helpers (now, to_public, to_admin, media_to_dict)
+  7. Routes:
+       - public:  GET /api/profiles, /api/profiles/{id}/verify, /api/admin/verify
+       - admin:   /api/admin/profiles* (header X-Admin-Passcode)
+       - media:   /api/profiles/{id}/media* (header X-Profile-Passcode)
+       - sections: /api/profiles/{id}/sections/reorder (header X-Profile-Passcode)
+       - oembed:  GET /api/oembed?url=... (YouTube/Vimeo metadata proxy)
+"""
+
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, APIRouter, HTTPException, Header, Depends, Request
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
@@ -6,6 +25,10 @@ import os
 import logging
 import re
 import time
+import json
+import asyncio
+import urllib.request
+import urllib.parse
 from collections import defaultdict
 from pathlib import Path
 from pydantic import BaseModel, Field, ConfigDict, field_validator
@@ -23,7 +46,21 @@ db = client[os.environ['DB_NAME']]
 
 MASTER_PASSCODE = os.environ.get('MASTER_PASSCODE', '1115')
 
-app = FastAPI(title="MediaHub API")
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    # Startup: idempotent seed + backfills
+    try:
+        await _seed_westwood_ranch()
+        await _backfill_media_order()
+    except Exception as e:
+        logger.exception(f"Startup tasks failed: {e}")
+    yield
+    # Shutdown
+    client.close()
+
+
+app = FastAPI(title="MediaHub API", lifespan=lifespan)
 api_router = APIRouter(prefix="/api")
 
 
@@ -518,6 +555,85 @@ async def reorder_media(profile_id: str, body: MediaReorder):
     return {"ok": True, "updated": updated, "section": section}
 
 
+# --- Section reorder (profile-passcode gated) ---
+class SectionReorder(BaseModel):
+    sections: List[str] = Field(min_length=1, max_length=20)
+
+
+@api_router.post(
+    "/profiles/{profile_id}/sections/reorder",
+    dependencies=[Depends(verify_profile_access)],
+)
+async def reorder_sections(profile_id: str, body: SectionReorder):
+    """Reorder a profile's sections. Only reordering is allowed (no add/remove
+    via this endpoint — those still go through the admin endpoints)."""
+    doc = await db.profiles.find_one(
+        {"id": profile_id}, {"_id": 0, "sections": 1}
+    )
+    if not doc:
+        raise HTTPException(status_code=404, detail="Profile not found")
+    new = [s.strip() for s in body.sections if s and s.strip()]
+    if set(new) != set(doc.get("sections", [])):
+        raise HTTPException(
+            status_code=400,
+            detail="Sections must be a reorder of existing names (no add/remove here)",
+        )
+    await db.profiles.update_one(
+        {"id": profile_id},
+        {"$set": {"sections": new, "updatedAt": _now_iso()}},
+    )
+    return {"ok": True, "sections": new}
+
+
+# --- oEmbed metadata proxy (public; for the MediaForm "Fetch from URL" button) ---
+@api_router.get("/oembed")
+async def oembed_lookup(url: str):
+    """Fetch oEmbed metadata for a YouTube or Vimeo URL.
+    Returns {provider, title, description, thumbnail_url, author_name}."""
+    url = (url or "").strip()
+    if not (url.startswith("http://") or url.startswith("https://")):
+        raise HTTPException(status_code=400, detail="Invalid URL")
+
+    low = url.lower()
+    if "youtube.com" in low or "youtu.be" in low:
+        endpoint = (
+            "https://www.youtube.com/oembed?format=json&url="
+            + urllib.parse.quote(url, safe=":/?&=")
+        )
+        provider = "youtube"
+    elif "vimeo.com" in low:
+        endpoint = (
+            "https://vimeo.com/api/oembed.json?url="
+            + urllib.parse.quote(url, safe=":/?&=")
+        )
+        provider = "vimeo"
+    else:
+        raise HTTPException(
+            status_code=400, detail="Only YouTube and Vimeo URLs are supported"
+        )
+
+    def _fetch():
+        req = urllib.request.Request(
+            endpoint, headers={"User-Agent": "MediaHub/1.0"}
+        )
+        with urllib.request.urlopen(req, timeout=8) as resp:
+            return json.loads(resp.read().decode("utf-8"))
+
+    try:
+        data = await asyncio.to_thread(_fetch)
+    except Exception as e:
+        logger.warning(f"oEmbed failed for {url}: {e}")
+        raise HTTPException(status_code=502, detail="Could not fetch metadata")
+
+    return {
+        "provider": provider,
+        "title": data.get("title", "") or "",
+        "description": data.get("description", "") or "",
+        "thumbnail_url": data.get("thumbnail_url", "") or "",
+        "author_name": data.get("author_name", "") or "",
+    }
+
+
 app.include_router(api_router)
 
 # ---------- Seed example profile (Westwood Ranch) ----------
@@ -654,11 +770,8 @@ async def _seed_westwood_ranch() -> None:
 
 @app.on_event("startup")
 async def _startup_seed():
-    try:
-        await _seed_westwood_ranch()
-        await _backfill_media_order()
-    except Exception as e:
-        logger.exception(f"Seed failed: {e}")
+    # superseded by the lifespan handler; kept as a no-op for any pre-existing tooling
+    return
 
 
 async def _backfill_media_order() -> None:
@@ -705,4 +818,5 @@ logger = logging.getLogger(__name__)
 
 @app.on_event("shutdown")
 async def shutdown_db_client():
-    client.close()
+    # kept for any process managers that still send shutdown signals
+    pass

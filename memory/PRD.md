@@ -90,10 +90,16 @@ Build the foundation of a personal media hub web app called MediaHub. React fron
 - Post-deploy-scan hardening: reorder_media now uses `bulk_write`; startup cursors capped at safe limits
 
 ### Tier 1 security + Chromebook DX — iteration 7 (2026-02)
-- **Per-profile passcode gate** on all 5 media endpoints (list/create/update/delete/reorder). Header `X-Profile-Passcode` required; mismatch → 401. FE stores the passcode in sessionStorage after the dialog verify, attaches it to every media call, clears it on exit.
-- **Rate limiter** on `/api/admin/verify` and `/api/profiles/{id}/verify`: 5 failed attempts within 5 minutes per IP → 429 with `Retry-After`. In-memory dict, no external dep.
-- **New `/app/README.md`** written for low-RAM Chromebook usage: NODE_OPTIONS memory cap, `--network-timeout` + `--prefer-offline` install, "edit FE-only" and "edit BE-only" patterns to avoid running both, common-error troubleshooting.
-- Verified via curl: media without header → 401; with wrong code → 401; with correct → 200; 6th wrong admin verify within 5 min → 429.
+- **Per-profile passcode gate** on all 5 media endpoints. Header `X-Profile-Passcode` required; FE stores after dialog verify, sends on every call, clears on exit.
+- **Rate limiter** on `/api/admin/verify` + `/api/profiles/{id}/verify`: 5 fails / 5 min / IP → 429 with `Retry-After`. In-memory, no deps.
+- New `/app/README.md` written plainly for low-RAM Chromebook setup.
+
+### Tier 2 polish — iteration 8 (2026-02)
+- **FastAPI lifespan handler** replaces deprecated `@app.on_event("startup")` — same idempotent seed + backfill behavior, no deprecation warning.
+- **oEmbed proxy** at `GET /api/oembed?url=...` (stdlib only, no new deps). Resolves YouTube + Vimeo metadata server-side. `MediaForm` now has a "Fetch from URL" button that fills title / description / poster from the source URL — only fills empty fields so it never overwrites user input.
+- **Section reorder from profile shell**: new `POST /api/profiles/{id}/sections/reorder` endpoint (passcode-gated, only accepts permutations — no add/remove). UI: a small "Reorder" toggle in the section nav swaps the filter pills into draggable pills with Save / Cancel buttons; updates `sessionStorage` on save.
+- Added a top-of-file docstring to `server.py` mapping out the 7-section layout so new contributors can read top-down.
+- Verified via curl: oEmbed YouTube returns real title, bad URLs → 400, section reorder works, bad set → 400, missing passcode → 401.
 
 ## Backlog (Future Phases)
 **P0 — content layer**

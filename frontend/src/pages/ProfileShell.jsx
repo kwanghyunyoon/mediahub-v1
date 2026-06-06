@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { motion } from "framer-motion";
-import { ArrowLeft, LogOut, Plus, Library } from "lucide-react";
+import { ArrowLeft, LogOut, Plus, Library, GripVertical, Check, X as XIcon } from "lucide-react";
 import {
   DndContext,
   closestCenter,
@@ -15,14 +15,44 @@ import {
   SortableContext,
   sortableKeyboardCoordinates,
   rectSortingStrategy,
+  horizontalListSortingStrategy,
+  useSortable,
 } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { getIcon, hexToRgb } from "@/lib/registry";
-import { listMedia, reorderMedia, clearProfilePasscode } from "@/lib/api";
+import { listMedia, reorderMedia, reorderSections, clearProfilePasscode } from "@/lib/api";
 import MediaForm from "@/components/MediaForm";
 import VideoPlayer from "@/components/VideoPlayer";
 import SortableMediaCard from "@/components/SortableMediaCard";
+
+// Sortable wrapper for a section pill (used in "Reorder sections" mode).
+function SortableSectionPill({ id, label }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
+    useSortable({ id });
+  return (
+    <div
+      ref={setNodeRef}
+      style={{
+        transform: CSS.Transform.toString(transform),
+        transition,
+        zIndex: isDragging ? 30 : 1,
+      }}
+      {...attributes}
+      {...listeners}
+      data-testid={`reorder-pill-${id}`}
+      className={`inline-flex items-center gap-2 px-4 md:px-5 py-2 rounded-full text-sm whitespace-nowrap cursor-grab active:cursor-grabbing border ${
+        isDragging
+          ? "bg-white/[0.08] border-white/30 text-white"
+          : "bg-white/[0.03] border-white/10 text-white/80 hover:border-white/20"
+      }`}
+    >
+      <GripVertical className="w-3.5 h-3.5 text-white/40" />
+      {label}
+    </div>
+  );
+}
 
 export default function ProfileShell() {
   const { id } = useParams();
@@ -37,6 +67,10 @@ export default function ProfileShell() {
   const [editing, setEditing] = useState(null); // media object when editing
   const [defaultSection, setDefaultSection] = useState(null);
   const [playing, setPlaying] = useState(null); // media object currently in player
+
+  // Section-reorder mode (profile-shell)
+  const [reorderingSections, setReorderingSections] = useState(false);
+  const [draftSections, setDraftSections] = useState([]);
 
   useEffect(() => {
     const raw = sessionStorage.getItem(`mh_profile_${id}`);
@@ -268,14 +302,79 @@ export default function ProfileShell() {
         </div>
       </header>
 
-      {/* Section filter pills */}
+      {/* Section filter pills (or sortable list in reorder mode) */}
       <nav
         data-testid="profile-sections-nav"
         className={`px-5 md:px-10 py-4 border-b overflow-x-auto ${themeBorderClass}`}
       >
         {profile.sections.length === 0 ? (
           <p className="text-xs uppercase tracking-[0.2em] text-white/30">No sections configured</p>
+        ) : reorderingSections ? (
+          /* --- Reorder mode --- */
+          <div className="flex items-center gap-3 min-w-max">
+            <span className="text-[10px] uppercase tracking-[0.3em] text-white/40 font-medium pr-1">
+              Drag to reorder
+            </span>
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragEnd={(e) => {
+                const { active, over } = e;
+                if (!over || active.id === over.id) return;
+                const oldIdx = draftSections.indexOf(active.id);
+                const newIdx = draftSections.indexOf(over.id);
+                if (oldIdx < 0 || newIdx < 0) return;
+                setDraftSections(arrayMove(draftSections, oldIdx, newIdx));
+              }}
+            >
+              <SortableContext
+                items={draftSections}
+                strategy={horizontalListSortingStrategy}
+              >
+                <div className="flex items-center gap-2">
+                  {draftSections.map((s) => (
+                    <SortableSectionPill key={s} id={s} label={s} />
+                  ))}
+                </div>
+              </SortableContext>
+            </DndContext>
+            <button
+              type="button"
+              data-testid="sections-reorder-cancel"
+              onClick={() => {
+                setReorderingSections(false);
+                setDraftSections([]);
+              }}
+              className="w-9 h-9 rounded-full border border-white/10 flex items-center justify-center text-white/50 hover:text-white hover:border-white/30 transition-colors"
+              aria-label="Cancel reorder"
+            >
+              <XIcon className="w-4 h-4" />
+            </button>
+            <button
+              type="button"
+              data-testid="sections-reorder-save"
+              onClick={async () => {
+                try {
+                  await reorderSections(profile.id, draftSections);
+                  const next = { ...profile, sections: [...draftSections] };
+                  setProfile(next);
+                  sessionStorage.setItem(`mh_profile_${id}`, JSON.stringify(next));
+                  toast.success("Section order saved");
+                  setReorderingSections(false);
+                  setDraftSections([]);
+                } catch {
+                  toast.error("Save failed");
+                }
+              }}
+              style={{ backgroundColor: profile.color }}
+              className="h-9 px-4 rounded-full text-sm text-white hover:opacity-90 inline-flex items-center gap-1.5"
+            >
+              <Check className="w-4 h-4" />
+              Save
+            </button>
+          </div>
         ) : (
+          /* --- Normal filter mode --- */
           <div className="flex items-center gap-2 min-w-max">
             {[{ key: "__all__", label: "All" }, ...profile.sections.map((s) => ({ key: s, label: s }))].map(
               (tab, idx) => {
@@ -308,6 +407,19 @@ export default function ProfileShell() {
                 );
               }
             )}
+            <button
+              type="button"
+              data-testid="sections-reorder-start"
+              onClick={() => {
+                setDraftSections([...profile.sections]);
+                setReorderingSections(true);
+              }}
+              className="ml-2 inline-flex items-center gap-1.5 text-[10px] uppercase tracking-[0.15em] text-white/40 hover:text-white/80 transition-colors px-2 py-1"
+              title="Reorder sections"
+            >
+              <GripVertical className="w-3.5 h-3.5" />
+              Reorder
+            </button>
           </div>
         )}
       </nav>
