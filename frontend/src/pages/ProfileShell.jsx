@@ -19,7 +19,7 @@ import {
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { getIcon, hexToRgb } from "@/lib/registry";
-import { listMedia, reorderMedia } from "@/lib/api";
+import { listMedia, reorderMedia, clearProfilePasscode } from "@/lib/api";
 import MediaForm from "@/components/MediaForm";
 import VideoPlayer from "@/components/VideoPlayer";
 import SortableMediaCard from "@/components/SortableMediaCard";
@@ -128,6 +128,7 @@ export default function ProfileShell() {
 
   const exit = () => {
     sessionStorage.removeItem(`mh_profile_${id}`);
+    clearProfilePasscode(id);
     navigate("/");
   };
 

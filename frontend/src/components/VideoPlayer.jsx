@@ -23,6 +23,25 @@ const SOURCE_META = {
   embed: { Icon: Link2, label: "Embed" },
 };
 
+function ActionBtn({ "data-testid": tid, icon: Icon, label, onClick, danger }) {
+  return (
+    <button
+      type="button"
+      data-testid={tid}
+      onClick={onClick}
+      className={`inline-flex items-center gap-2 h-10 px-3 md:px-4 rounded-full text-sm border transition-colors ${
+        danger
+          ? "border-white/10 text-white/60 hover:text-[#F43F5E] hover:border-[#F43F5E]/60 hover:bg-[#F43F5E]/10"
+          : "border-white/10 text-white/70 hover:text-white hover:border-white/30 hover:bg-white/[0.06]"
+      }`}
+      aria-label={label}
+    >
+      <Icon className="w-4 h-4" strokeWidth={1.75} />
+      <span className="hidden sm:inline">{label}</span>
+    </button>
+  );
+}
+
 /**
  * VideoPlayer — fullscreen in-app overlay.
  *
@@ -82,23 +101,6 @@ export default function VideoPlayer({
       setDeleting(false);
     }
   };
-
-  const ActionBtn = ({ "data-testid": tid, icon: Icon, label, onClick, danger }) => (
-    <button
-      type="button"
-      data-testid={tid}
-      onClick={onClick}
-      className={`inline-flex items-center gap-2 h-10 px-3 md:px-4 rounded-full text-sm border transition-colors ${
-        danger
-          ? "border-white/10 text-white/60 hover:text-[#F43F5E] hover:border-[#F43F5E]/60 hover:bg-[#F43F5E]/10"
-          : "border-white/10 text-white/70 hover:text-white hover:border-white/30 hover:bg-white/[0.06]"
-      }`}
-      aria-label={label}
-    >
-      <Icon className="w-4 h-4" strokeWidth={1.75} />
-      <span className="hidden sm:inline">{label}</span>
-    </button>
-  );
 
   return (
     <AnimatePresence>
@@ -256,7 +258,7 @@ export default function VideoPlayer({
             <AlertDialogHeader>
               <AlertDialogTitle>Delete this media item?</AlertDialogTitle>
               <AlertDialogDescription className="text-white/50">
-                "{media.title}" will be permanently removed.
+                &ldquo;{media.title}&rdquo; will be permanently removed.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>

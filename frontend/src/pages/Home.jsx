@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { Settings } from "lucide-react";
-import { listProfiles } from "@/lib/api";
+import { listProfiles, setProfilePasscode } from "@/lib/api";
 import ProfileCard from "@/components/ProfileCard";
 import PasscodeDialog from "@/components/PasscodeDialog";
 
@@ -19,8 +19,9 @@ export default function Home() {
       .finally(() => setLoading(false));
   }, []);
 
-  const handleSuccess = (p) => {
+  const handleSuccess = (p, passcode) => {
     sessionStorage.setItem(`mh_profile_${p.id}`, JSON.stringify(p));
+    setProfilePasscode(p.id, passcode);
     setSelected(null);
     navigate(`/profile/${p.id}`);
   };

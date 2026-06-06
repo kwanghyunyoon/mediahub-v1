@@ -86,7 +86,14 @@ Build the foundation of a personal media hub web app called MediaHub. React fron
 - `@dnd-kit/core` + `@dnd-kit/sortable` integrated. Sections in `ProfileForm` are now a vertical sortable list (grip handle per row); media items in each section grid use `rectSortingStrategy` with PointerSensor distance=8 so simple clicks still open the player
 - New `ProfileForm` Theme picker (4 cards): `default`, `western`, `neon` (Neon Arcade), `studio` (Studio Loft); persisted on save
 - New `ProfileShell` rendering for `neon` (cyber-magenta + cyan glow on serif-shadow headings, grid backdrop) and `studio` (warm monochrome backdrop, italic serif headings via DM Serif Display)
-- Tested: 55/55 backend (incl. TestMediaOrderAndReorder, TestWestwoodOrderBackfill, TestNewThemes) + all 10 frontend review items passing
+- Tested: 55/55 backend + all 10 frontend review items passing
+- Post-deploy-scan hardening: reorder_media now uses `bulk_write`; startup cursors capped at safe limits
+
+### Tier 1 security + Chromebook DX — iteration 7 (2026-02)
+- **Per-profile passcode gate** on all 5 media endpoints (list/create/update/delete/reorder). Header `X-Profile-Passcode` required; mismatch → 401. FE stores the passcode in sessionStorage after the dialog verify, attaches it to every media call, clears it on exit.
+- **Rate limiter** on `/api/admin/verify` and `/api/profiles/{id}/verify`: 5 failed attempts within 5 minutes per IP → 429 with `Retry-After`. In-memory dict, no external dep.
+- **New `/app/README.md`** written for low-RAM Chromebook usage: NODE_OPTIONS memory cap, `--network-timeout` + `--prefer-offline` install, "edit FE-only" and "edit BE-only" patterns to avoid running both, common-error troubleshooting.
+- Verified via curl: media without header → 401; with wrong code → 401; with correct → 200; 6th wrong admin verify within 5 min → 429.
 
 ## Backlog (Future Phases)
 **P0 — content layer**

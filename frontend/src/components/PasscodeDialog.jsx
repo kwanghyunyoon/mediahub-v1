@@ -17,7 +17,7 @@ export default function PasscodeDialog({ profile, open, onClose, onSuccess }) {
     setBusy(true);
     try {
       const data = await verifyProfile(profile.id, code);
-      onSuccess(data);
+      onSuccess(data, code);
     } catch (e) {
       setErrorKey((k) => k + 1);
     } finally {

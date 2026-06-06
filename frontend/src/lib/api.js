@@ -8,13 +8,22 @@ const api = axios.create({
   headers: { "Content-Type": "application/json" },
 });
 
+// --- Admin passcode (master) ---
 const ADMIN_KEY = "mediahub_admin_passcode";
-
 export const setAdminPasscode = (code) => sessionStorage.setItem(ADMIN_KEY, code);
 export const getAdminPasscode = () => sessionStorage.getItem(ADMIN_KEY) || "";
 export const clearAdminPasscode = () => sessionStorage.removeItem(ADMIN_KEY);
-
 const adminHeaders = () => ({ "X-Admin-Passcode": getAdminPasscode() });
+
+// --- Per-profile passcode (used for media endpoints) ---
+const profileKey = (id) => `mh_passcode_${id}`;
+export const setProfilePasscode = (id, code) =>
+  sessionStorage.setItem(profileKey(id), code);
+export const getProfilePasscode = (id) =>
+  sessionStorage.getItem(profileKey(id)) || "";
+export const clearProfilePasscode = (id) =>
+  sessionStorage.removeItem(profileKey(id));
+const profileHeaders = (id) => ({ "X-Profile-Passcode": getProfilePasscode(id) });
 
 export const listProfiles = async () => {
   const { data } = await api.get("/profiles");

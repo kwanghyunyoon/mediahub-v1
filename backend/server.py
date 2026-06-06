@@ -1,10 +1,12 @@
-from fastapi import FastAPI, APIRouter, HTTPException, Header
+from fastapi import FastAPI, APIRouter, HTTPException, Header, Depends, Request
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 import os
 import logging
 import re
+import time
+from collections import defaultdict
 from pathlib import Path
 from pydantic import BaseModel, Field, ConfigDict, field_validator
 from typing import List, Optional, Literal
@@ -221,6 +223,56 @@ def _require_admin(x_admin_passcode: Optional[str]) -> None:
         raise HTTPException(status_code=401, detail="Invalid admin passcode")
 
 
+# ---------- Simple rate limiter for passcode verify endpoints ----------
+# Tracks failed attempts per IP. After 5 fails in 5 minutes -> 429 for that IP.
+_FAIL_LOG: dict = defaultdict(list)
+_FAIL_WINDOW = 300   # 5 minutes
+_FAIL_MAX = 5
+
+
+def _client_ip(request: Request) -> str:
+    fwd = request.headers.get("x-forwarded-for")
+    if fwd:
+        return fwd.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
+
+def _check_rate(ip: str) -> None:
+    now = time.time()
+    fresh = [t for t in _FAIL_LOG[ip] if now - t < _FAIL_WINDOW]
+    _FAIL_LOG[ip] = fresh
+    if len(fresh) >= _FAIL_MAX:
+        retry = int(_FAIL_WINDOW - (now - fresh[0]))
+        raise HTTPException(
+            status_code=429,
+            detail=f"Too many failed attempts. Try again in {retry}s.",
+            headers={"Retry-After": str(max(retry, 1))},
+        )
+
+
+def _record_fail(ip: str) -> None:
+    _FAIL_LOG[ip].append(time.time())
+
+
+def _clear_fails(ip: str) -> None:
+    _FAIL_LOG.pop(ip, None)
+
+
+# ---------- Media access gate (per-profile passcode header) ----------
+async def verify_profile_access(
+    profile_id: str,
+    x_profile_passcode: Optional[str] = Header(default=None),
+) -> None:
+    """Dependency: requires X-Profile-Passcode matching the profile."""
+    if not x_profile_passcode:
+        raise HTTPException(status_code=401, detail="X-Profile-Passcode header required")
+    doc = await db.profiles.find_one({"id": profile_id}, {"_id": 0, "passcode": 1})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Profile not found")
+    if doc["passcode"] != x_profile_passcode:
+        raise HTTPException(status_code=401, detail="Invalid profile passcode")
+
+
 def _media_to_dict(doc: dict) -> dict:
     return {
         "id": doc["id"],
@@ -250,9 +302,13 @@ async def root():
 
 
 @api_router.post("/admin/verify")
-async def admin_verify(body: AdminVerify):
+async def admin_verify(body: AdminVerify, request: Request):
+    ip = _client_ip(request)
+    _check_rate(ip)
     if body.passcode != MASTER_PASSCODE:
+        _record_fail(ip)
         raise HTTPException(status_code=401, detail="Invalid master passcode")
+    _clear_fails(ip)
     return {"ok": True}
 
 
@@ -264,12 +320,16 @@ async def list_profiles_public():
 
 
 @api_router.post("/profiles/{profile_id}/verify", response_model=ProfilePublic)
-async def verify_profile_passcode(profile_id: str, body: PasscodeVerify):
+async def verify_profile_passcode(profile_id: str, body: PasscodeVerify, request: Request):
+    ip = _client_ip(request)
+    _check_rate(ip)
     doc = await db.profiles.find_one({"id": profile_id}, {"_id": 0})
     if not doc:
         raise HTTPException(status_code=404, detail="Profile not found")
     if body.passcode != doc.get("passcode"):
+        _record_fail(ip)
         raise HTTPException(status_code=401, detail="Wrong passcode")
+    _clear_fails(ip)
     return _to_public(doc)
 
 
@@ -338,8 +398,11 @@ async def delete_profile(
     return {"ok": True, "deleted": profile_id}
 
 
-# --- Media routes (scoped by profile) ---
-@api_router.get("/profiles/{profile_id}/media")
+# --- Media routes (scoped by profile, gated by per-profile passcode) ---
+@api_router.get(
+    "/profiles/{profile_id}/media",
+    dependencies=[Depends(verify_profile_access)],
+)
 async def list_media(profile_id: str):
     await _ensure_profile_exists(profile_id)
     cursor = db.media.find({"profileId": profile_id}, {"_id": 0}).sort(
@@ -349,7 +412,10 @@ async def list_media(profile_id: str):
     return [_media_to_dict(d) for d in docs]
 
 
-@api_router.post("/profiles/{profile_id}/media")
+@api_router.post(
+    "/profiles/{profile_id}/media",
+    dependencies=[Depends(verify_profile_access)],
+)
 async def create_media(profile_id: str, body: MediaCreate):
     await _ensure_profile_exists(profile_id)
     now = _now_iso()
@@ -376,7 +442,10 @@ async def create_media(profile_id: str, body: MediaCreate):
     return _media_to_dict(doc)
 
 
-@api_router.put("/profiles/{profile_id}/media/{media_id}")
+@api_router.put(
+    "/profiles/{profile_id}/media/{media_id}",
+    dependencies=[Depends(verify_profile_access)],
+)
 async def update_media(profile_id: str, media_id: str, body: MediaUpdate):
     existing = await db.media.find_one(
         {"id": media_id, "profileId": profile_id}, {"_id": 0}
@@ -402,7 +471,10 @@ async def update_media(profile_id: str, media_id: str, body: MediaUpdate):
     return _media_to_dict(doc)
 
 
-@api_router.delete("/profiles/{profile_id}/media/{media_id}")
+@api_router.delete(
+    "/profiles/{profile_id}/media/{media_id}",
+    dependencies=[Depends(verify_profile_access)],
+)
 async def delete_media(profile_id: str, media_id: str):
     result = await db.media.delete_one({"id": media_id, "profileId": profile_id})
     if result.deleted_count == 0:
@@ -415,7 +487,10 @@ class MediaReorder(BaseModel):
     mediaIds: List[str] = Field(min_length=1, max_length=2000)
 
 
-@api_router.post("/profiles/{profile_id}/media/reorder")
+@api_router.post(
+    "/profiles/{profile_id}/media/reorder",
+    dependencies=[Depends(verify_profile_access)],
+)
 async def reorder_media(profile_id: str, body: MediaReorder):
     """Set the order of media items within one section, by id sequence."""
     from pymongo import UpdateOne
