@@ -76,6 +76,7 @@ class ProfileCreate(BaseModel):
     icon: str = Field(min_length=1, max_length=40)
     sections: List[str] = Field(default_factory=list)
     theme: str = Field(default="default", max_length=30)
+    backgroundUrl: Optional[str] = Field(default=None, max_length=2048)
 
     @field_validator('passcode')
     @classmethod
@@ -97,6 +98,18 @@ class ProfileCreate(BaseModel):
         cleaned = [s.strip() for s in v if s and s.strip()]
         return cleaned[:20]
 
+    @field_validator('backgroundUrl')
+    @classmethod
+    def _v_bg(cls, v):
+        if v is None:
+            return None
+        v = v.strip()
+        if not v:
+            return None
+        if not (v.startswith('http://') or v.startswith('https://')):
+            raise ValueError('backgroundUrl must start with http:// or https://')
+        return v
+
 
 class ProfileUpdate(BaseModel):
     name: Optional[str] = Field(default=None, min_length=1, max_length=40)
@@ -105,6 +118,7 @@ class ProfileUpdate(BaseModel):
     icon: Optional[str] = Field(default=None, min_length=1, max_length=40)
     sections: Optional[List[str]] = None
     theme: Optional[str] = Field(default=None, max_length=30)
+    backgroundUrl: Optional[str] = Field(default=None, max_length=2048)
 
     @field_validator('passcode')
     @classmethod
@@ -132,6 +146,18 @@ class ProfileUpdate(BaseModel):
         cleaned = [s.strip() for s in v if s and s.strip()]
         return cleaned[:20]
 
+    @field_validator('backgroundUrl')
+    @classmethod
+    def _v_bg(cls, v):
+        if v is None:
+            return None
+        v = v.strip()
+        if v == "":
+            return ""  # sentinel: clear the background
+        if not (v.startswith('http://') or v.startswith('https://')):
+            raise ValueError('backgroundUrl must start with http:// or https://')
+        return v
+
 
 class Profile(BaseModel):
     model_config = ConfigDict(extra="ignore")
@@ -153,6 +179,7 @@ class ProfilePublic(BaseModel):
     icon: str
     sections: List[str]
     theme: str = "default"
+    backgroundUrl: Optional[str] = None
 
 
 class PasscodeVerify(BaseModel):
@@ -238,6 +265,7 @@ def _to_public(doc: dict) -> dict:
         "icon": doc["icon"],
         "sections": doc.get("sections", []),
         "theme": doc.get("theme", "default"),
+        "backgroundUrl": doc.get("backgroundUrl"),
     }
 
 
@@ -249,6 +277,7 @@ def _to_admin(doc: dict) -> dict:
         "icon": doc["icon"],
         "sections": doc.get("sections", []),
         "theme": doc.get("theme", "default"),
+        "backgroundUrl": doc.get("backgroundUrl"),
         "passcode": doc["passcode"],
         "createdAt": doc.get("createdAt"),
         "updatedAt": doc.get("updatedAt"),
@@ -394,6 +423,7 @@ async def create_profile(
         "icon": body.icon,
         "sections": body.sections,
         "theme": body.theme,
+        "backgroundUrl": body.backgroundUrl,
         "createdAt": now,
         "updatedAt": now,
     }
@@ -415,6 +445,9 @@ async def update_profile(
     updates = {k: v for k, v in body.model_dump(exclude_unset=True).items() if v is not None}
     if "name" in updates:
         updates["name"] = updates["name"].strip()
+    # Empty string means "clear the background image"
+    if "backgroundUrl" in body.model_dump(exclude_unset=True) and body.backgroundUrl == "":
+        updates["backgroundUrl"] = None
     updates["updatedAt"] = _now_iso()
     await db.profiles.update_one({"id": profile_id}, {"$set": updates})
     doc = await db.profiles.find_one({"id": profile_id}, {"_id": 0})

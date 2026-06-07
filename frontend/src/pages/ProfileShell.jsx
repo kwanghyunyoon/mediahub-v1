@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { ArrowLeft, LogOut, Plus, Library, GripVertical, Check, X as XIcon } from "lucide-react";
+import { useInactivityTimer } from "@/hooks/use-inactivity-timer";
 import {
   DndContext,
   closestCenter,
@@ -111,11 +112,23 @@ export default function ProfileShell() {
     return groups.filter((g) => g.label === activeSection);
   }, [profile, media, activeSection]);
 
-  // Hooks must run unconditionally on every render — keep above the early-return.
+  // All hooks must run unconditionally on every render — keep above the early-return.
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
   );
+
+  const exit = useCallback(() => {
+    sessionStorage.removeItem(`mh_profile_${id}`);
+    clearProfilePasscode(id);
+    navigate("/");
+  }, [id, navigate]);
+
+  const { showWarning, countdown, dismiss } = useInactivityTimer({
+    timeoutMs: 10 * 60 * 1000, // 10 minutes
+    warningMs: 60 * 1000,       // warn 1 minute before
+    onLogout: exit,
+  });
 
   if (!profile) return null;
   const Icon = getIcon(profile.icon);
@@ -150,20 +163,12 @@ export default function ProfileShell() {
       const newIdx = ids.indexOf(over.id);
       if (oldIdx < 0 || newIdx < 0) return prev;
       const reordered = arrayMove(sectionItems, oldIdx, newIdx);
-      // PATCH the new order to the server (fire-and-forget; show toast on err)
       reorderMedia(profile.id, sectionLabel, reordered.map((m) => m.id)).catch(() =>
         toast.error("Reorder failed")
       );
-      // Optimistic UI: rebuild full media array with new order for this section
       const others = prev.filter((m) => m.sectionLabel !== sectionLabel);
       return [...others, ...reordered.map((m, i) => ({ ...m, order: i }))];
     });
-  };
-
-  const exit = () => {
-    sessionStorage.removeItem(`mh_profile_${id}`);
-    clearProfilePasscode(id);
-    navigate("/");
   };
 
   const openAdd = (sectionLabel = null) => {
@@ -178,11 +183,22 @@ export default function ProfileShell() {
     setFormOpen(true);
   };
 
+  const hasBg = !!profile.backgroundUrl;
+
   return (
     <div
       className={`min-h-screen flex flex-col ${themeBgClass}`}
       data-theme={profile.theme || "default"}
-      style={{ "--p-color": profile.color, "--p-rgb": rgb }}
+      style={{
+        "--p-color": profile.color,
+        "--p-rgb": rgb,
+        ...(hasBg && {
+          backgroundImage: `linear-gradient(rgba(5,5,7,0.82) 0%, rgba(5,5,7,0.94) 100%), url(${profile.backgroundUrl})`,
+          backgroundSize: "cover",
+          backgroundPosition: "center",
+          backgroundAttachment: "fixed",
+        }),
+      }}
     >
       {/* Cinematic hero banner — western theme only */}
       {isWestern && (
@@ -194,8 +210,7 @@ export default function ProfileShell() {
             aria-hidden
             className="absolute inset-0 bg-cover bg-center"
             style={{
-              backgroundImage:
-                "url('https://images.unsplash.com/photo-1469854523086-cc02fe5d8800?auto=format&fit=crop&w=2000&q=80')",
+              backgroundImage: `url('${profile.backgroundUrl || "https://images.unsplash.com/photo-1469854523086-cc02fe5d8800?auto=format&fit=crop&w=2000&q=80"}')`,
             }}
           />
           <div
@@ -561,6 +576,81 @@ export default function ProfileShell() {
         }}
         onDeleted={refresh}
       />
+
+      {/* Inactivity lock screen warning */}
+      <AnimatePresence>
+        {showWarning && (
+          <motion.div
+            key="lock-warning"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.3 }}
+            className="fixed inset-0 z-[200] flex items-center justify-center"
+            style={{ backgroundColor: "rgba(5,5,7,0.88)", backdropFilter: "blur(12px)" }}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 10 }}
+              transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
+              className="flex flex-col items-center gap-6 px-8 py-10 rounded-3xl border border-white/[0.08] bg-[#0d0d12] max-w-sm w-full mx-4 text-center"
+            >
+              {/* Profile icon */}
+              <div
+                className="w-16 h-16 rounded-full flex items-center justify-center"
+                style={{ backgroundColor: profile.color }}
+              >
+                {(() => { const I = getIcon(profile.icon); return <I className="w-7 h-7 text-white" strokeWidth={1.75} />; })()}
+              </div>
+
+              {/* Countdown ring */}
+              <div className="relative w-20 h-20 flex items-center justify-center">
+                <svg className="absolute inset-0 -rotate-90" width="80" height="80" viewBox="0 0 80 80">
+                  <circle cx="40" cy="40" r="34" fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="4" />
+                  <circle
+                    cx="40" cy="40" r="34" fill="none"
+                    stroke={profile.color}
+                    strokeWidth="4"
+                    strokeLinecap="round"
+                    strokeDasharray={`${2 * Math.PI * 34}`}
+                    strokeDashoffset={`${2 * Math.PI * 34 * (1 - countdown / 60)}`}
+                    style={{ transition: "stroke-dashoffset 1s linear" }}
+                  />
+                </svg>
+                <span className="text-2xl font-mono font-semibold text-white tabular-nums">
+                  {countdown}
+                </span>
+              </div>
+
+              <div className="space-y-1.5">
+                <p className="text-lg font-medium text-white">Still watching?</p>
+                <p className="text-sm text-white/50">
+                  {profile.name} will be locked due to inactivity.
+                </p>
+              </div>
+
+              <div className="flex flex-col gap-2 w-full">
+                <button
+                  type="button"
+                  onClick={dismiss}
+                  className="w-full py-3 rounded-xl font-medium text-white transition-opacity hover:opacity-90"
+                  style={{ backgroundColor: profile.color }}
+                >
+                  Stay logged in
+                </button>
+                <button
+                  type="button"
+                  onClick={exit}
+                  className="w-full py-3 rounded-xl text-sm text-white/50 hover:text-white transition-colors"
+                >
+                  Log out now
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

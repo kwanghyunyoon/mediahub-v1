@@ -32,6 +32,7 @@ const DEFAULT = {
   icon: "User",
   sections: ["Movies", "Music"],
   theme: "default",
+  backgroundUrl: "",
 };
 
 function SortableSectionRow({ id, label, onRemove }) {
@@ -83,6 +84,7 @@ export default function ProfileForm({ initial, onClose, onSaved }) {
     icon: initial?.icon ?? DEFAULT.icon,
     sections: initial?.sections?.length ? [...initial.sections] : [...DEFAULT.sections],
     theme: initial?.theme ?? DEFAULT.theme,
+    backgroundUrl: initial?.backgroundUrl ?? DEFAULT.backgroundUrl,
   }));
   const [newSection, setNewSection] = useState("");
   const [saving, setSaving] = useState(false);
@@ -144,6 +146,7 @@ export default function ProfileForm({ initial, onClose, onSaved }) {
         icon: form.icon,
         sections: form.sections,
         theme: form.theme,
+        backgroundUrl: form.backgroundUrl.trim() || null,
       };
       if (isEdit) {
         await adminUpdateProfile(initial.id, payload);
@@ -273,6 +276,44 @@ export default function ProfileForm({ initial, onClose, onSaved }) {
             />
           </label>
         </div>
+      </div>
+
+      {/* Background Image URL */}
+      <div>
+        <Label className="text-[10px] uppercase tracking-[0.2em] text-white/40 mb-2 block">
+          Background Image{" "}
+          <span className="normal-case tracking-normal text-white/30">(optional)</span>
+        </Label>
+        <div className="flex gap-2">
+          <Input
+            data-testid="form-background-url-input"
+            value={form.backgroundUrl}
+            onChange={(e) => set("backgroundUrl", e.target.value)}
+            placeholder="https://..."
+            className="bg-[#0a0a0d] border-white/10 text-white placeholder:text-white/25 focus-visible:ring-1 focus-visible:ring-[var(--p-color)] focus-visible:border-[var(--p-color)]"
+          />
+          {form.backgroundUrl && (
+            <button
+              type="button"
+              onClick={() => set("backgroundUrl", "")}
+              className="w-9 h-9 shrink-0 rounded-lg flex items-center justify-center text-white/40 hover:text-white hover:bg-white/[0.06] border border-white/10 transition-colors"
+              aria-label="Clear background image"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          )}
+        </div>
+        {form.backgroundUrl && (
+          <div className="mt-2 relative rounded-xl overflow-hidden h-24 bg-[#0a0a0d] border border-white/[0.06]">
+            <img
+              src={form.backgroundUrl}
+              alt="Background preview"
+              className="w-full h-full object-cover"
+              onError={(e) => { e.currentTarget.style.display = "none"; }}
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent pointer-events-none" />
+          </div>
+        )}
       </div>
 
       {/* Icon */}
