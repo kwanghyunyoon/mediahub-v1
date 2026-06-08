@@ -864,10 +864,11 @@ async def _seed_mcqueen_zone() -> None:
         ("Amara's Tiara", "SuperKitties", f"{R2}/superkitties-amaras-tiara.mp4"),
         ("S1 E2: Fireworks Fright", "SuperKitties", f"{R2}/superkitties-s1e2.mp4"),
         ("S1 E3: Silent Surprise", "SuperKitties", f"{R2}/superkitties-s1e3.mp4"),
-        ("Pocoyo — Episodes Part 1", "Pocoyo", f"{R2}/pocoyo1.mp4"),
-        ("Pocoyo — Episodes Part 2", "Pocoyo", f"{R2}/pocoyo2.mp4"),
-        ("Pocoyo Spa — Part 1", "Pocoyo", f"{R2}/pocoyoSPA1.mp4"),
-        ("Pocoyo Spa — Part 2", "Pocoyo", f"{R2}/pocoyoSPA2.mp4"),
+        ("Pocoyo — Episodes Part 1", "Pocoyo", f"{R2}/Pocoyo%20-%20Episodes%20Part%201.mp4"),
+        ("Pocoyo — Episodes Part 2", "Pocoyo", f"{R2}/Pocoyo%20-%20Episodes%20Part%202.mp4"),
+        ("Pocoyo Spa — Part 1", "Pocoyo", f"{R2}/Pocoyo%20Spa%20-%20Part%201.mp4"),
+        ("Pocoyo Spa — Part 2", "Pocoyo", f"{R2}/Pocoyo%20Spa%20-%20Part%202.mp4"),
+        ("Pocoyo & Pato — Best Friends", "Pocoyo", f"{R2}/Pocoyo%20-%20Pocoyo%20%26%20Pato%20Best%20Friends.mp4"),
     ]
 
     section_counters: dict = {}
