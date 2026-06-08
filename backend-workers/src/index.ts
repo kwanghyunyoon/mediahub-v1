@@ -122,7 +122,7 @@ app.use("*", async (c, next) => {
   return cors({
     origin: originFn,
     allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allowHeaders: ["Content-Type", "X-Admin-Passcode"],
+    allowHeaders: ["Content-Type", "X-Admin-Passcode", "X-Profile-Passcode"],
   })(c, next);
 });
 
