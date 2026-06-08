@@ -1,57 +1,52 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, LogOut } from "lucide-react";
 import { toast } from "sonner";
 import { listMedia, clearProfilePasscode } from "@/lib/api";
+import KidsLayout, { DEFAULT_TABS } from "@/layouts/KidsLayout";
+import KidsDesktopLayout from "@/layouts/KidsDesktopLayout";
 import KidsVideoPlayer from "@/components/KidsVideoPlayer";
 import KidsCheckinOverlay from "@/components/KidsCheckinOverlay";
 import { useCheckinTimer } from "@/hooks/use-checkin-timer";
-import KidsTimer from "@/pages/KidsTimer";
-import KidsGallery from "@/pages/KidsGallery";
+import { useIsMobile } from "@/hooks/use-is-mobile";
 
 const SHOW_CONFIG = {
   "Cars by Pixar": {
     icon: "⚡",
     gradient: "linear-gradient(155deg,#5C0000 0%,#A81500 30%,#D43000 60%,#FF5200 85%,#FF7800 100%)",
-    tint: "linear-gradient(to bottom,rgba(92,0,0,0.55) 0%,rgba(168,21,0,0.25) 55%,rgba(0,0,0,0) 100%)",
+    tint: "linear-gradient(to top,rgba(7,7,7,0.95) 0%,rgba(7,7,7,0.35) 50%,transparent 100%)",
     accent: "#FF5200",
     glow: "rgba(255,82,0,0.55)",
-    ambience: "rgba(255,65,0,0.1)",
   },
   Bluey: {
     icon: "💙",
     gradient: "linear-gradient(155deg,#071F45 0%,#0D4EA0 40%,#1A72D0 70%,#3A9FE8 100%)",
-    tint: "linear-gradient(to bottom,rgba(7,31,69,0.5) 0%,rgba(13,78,160,0.2) 55%,rgba(0,0,0,0) 100%)",
+    tint: "linear-gradient(to top,rgba(7,7,7,0.95) 0%,rgba(7,7,7,0.35) 50%,transparent 100%)",
     accent: "#1E80D8",
     glow: "rgba(58,159,232,0.55)",
-    ambience: "rgba(28,120,210,0.1)",
   },
   SuperKitties: {
     icon: "🐱",
     gradient: "linear-gradient(155deg,#340050 0%,#6E0E98 40%,#A020C8 70%,#E040B0 100%)",
-    tint: "linear-gradient(to bottom,rgba(52,0,80,0.55) 0%,rgba(110,14,152,0.2) 55%,rgba(0,0,0,0) 100%)",
+    tint: "linear-gradient(to top,rgba(7,7,7,0.95) 0%,rgba(7,7,7,0.35) 50%,transparent 100%)",
     accent: "#C030B0",
     glow: "rgba(224,64,176,0.55)",
-    ambience: "rgba(190,48,175,0.1)",
   },
   Pocoyo: {
     icon: "🔵",
     gradient: "linear-gradient(155deg,#002060 0%,#0050C0 40%,#0080E0 70%,#40B8FF 100%)",
-    tint: "linear-gradient(to bottom,rgba(0,60,120,0.55) 0%,rgba(0,120,200,0.2) 55%,rgba(0,0,0,0) 100%)",
+    tint: "linear-gradient(to top,rgba(7,7,7,0.95) 0%,rgba(7,7,7,0.35) 50%,transparent 100%)",
     accent: "#0090E8",
     glow: "rgba(64,184,255,0.55)",
-    ambience: "rgba(0,140,230,0.1)",
   },
 };
 
 const FALLBACK_CONFIG = {
   icon: "🎬",
   gradient: "linear-gradient(155deg,#1a003a 0%,#4a0080 40%,#7000b8 70%,#a040e0 100%)",
-  tint: "linear-gradient(to bottom,rgba(30,0,60,0.55) 0%,rgba(70,0,120,0.2) 55%,rgba(0,0,0,0) 100%)",
+  tint: "linear-gradient(to top,rgba(7,7,7,0.95) 0%,rgba(7,7,7,0.35) 50%,transparent 100%)",
   accent: "#8840d0",
   glow: "rgba(136,64,208,0.55)",
-  ambience: "rgba(100,40,180,0.1)",
 };
 
 function getShowConfig(label) {
@@ -60,6 +55,286 @@ function getShowConfig(label) {
 
 const CHECKIN_OPTIONS = [0, 10, 20, 30];
 
+const TABS = DEFAULT_TABS;
+
+function VideoCard({ item, idx, last, section, isMobile, onPlay }) {
+  const [hovered, setHovered] = useState(false);
+  const cw = isMobile ? 136 : 220;
+  const ch = isMobile ? 77 : 124;
+  const accent = section.config.accent;
+
+  return (
+    <button
+      key={item.id}
+      onClick={onPlay}
+      onMouseEnter={() => !isMobile && setHovered(true)}
+      onMouseLeave={() => !isMobile && setHovered(false)}
+      style={{
+        flexShrink: 0,
+        width: cw,
+        background: "none",
+        border: "none",
+        padding: 0,
+        WebkitTapHighlightColor: "transparent",
+        cursor: "pointer",
+        textAlign: "left",
+        transform: hovered ? "scale(1.05)" : "scale(1)",
+        transition: "transform 0.2s ease",
+        zIndex: hovered ? 2 : 1,
+        position: "relative",
+      }}
+    >
+      <div
+        style={{
+          position: "relative",
+          width: cw,
+          height: ch,
+          borderRadius: isMobile ? "0.45rem" : "0.35rem",
+          overflow: "hidden",
+          outline: idx === last ? `2px solid ${accent}` : "2px solid transparent",
+          outlineOffset: "-2px",
+          boxShadow: hovered ? `0 12px 40px rgba(0,0,0,0.7), 0 0 20px ${accent}33` : "none",
+          transition: "box-shadow 0.2s ease",
+        }}
+      >
+        {item.posterUrl ? (
+          <div style={{ position: "absolute", inset: 0, backgroundImage: `url('${item.posterUrl}')`, backgroundSize: "cover", backgroundPosition: "center" }} />
+        ) : (
+          <div style={{ position: "absolute", inset: 0, background: section.config.gradient }} />
+        )}
+        <div style={{ position: "absolute", inset: 0, background: "linear-gradient(135deg,rgba(255,255,255,0.07) 0%,transparent 55%,rgba(0,0,0,0.35) 100%)" }} />
+
+        {/* Hover overlay with play button */}
+        {!isMobile && (
+          <div style={{
+            position: "absolute", inset: 0,
+            background: "rgba(0,0,0,0.45)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            opacity: hovered ? 1 : 0,
+            transition: "opacity 0.2s ease",
+          }}>
+            <div style={{
+              width: 40, height: 40, borderRadius: "50%",
+              background: "rgba(255,255,255,0.92)",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              fontSize: "1rem", paddingLeft: "0.15rem",
+            }}>▶</div>
+          </div>
+        )}
+
+        <div style={{ position: "absolute", top: "0.3rem", left: "0.3rem", background: "rgba(0,0,0,0.7)", backdropFilter: "blur(4px)", borderRadius: "0.22rem", padding: "1px 5px", fontSize: "0.55rem", fontWeight: 800, color: "#fff", letterSpacing: "0.06em", textTransform: "uppercase" }}>
+          Ep {idx + 1}
+        </div>
+        {idx === last && (
+          <div style={{ position: "absolute", top: "0.3rem", right: "0.3rem", background: accent, borderRadius: "0.22rem", padding: "1px 5px", fontSize: "0.52rem", fontWeight: 800, color: "#fff", letterSpacing: "0.06em", textTransform: "uppercase" }}>
+            Last
+          </div>
+        )}
+        <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: "40%", background: "linear-gradient(to top, rgba(0,0,0,0.55) 0%, transparent 100%)" }} />
+      </div>
+
+      <p style={{ fontFamily: "Nunito, Arial, sans-serif", fontSize: isMobile ? "0.68rem" : "0.75rem", fontWeight: 700, color: "rgba(255,255,255,0.82)", marginTop: "0.4rem", lineHeight: 1.3, overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}>
+        {item.title}
+      </p>
+      {item.description && (
+        <p style={{ fontSize: "0.6rem", color: "rgba(255,255,255,0.32)", marginTop: "0.1rem", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+          {item.description}
+        </p>
+      )}
+    </button>
+  );
+}
+
+function HeroCarousel({ sections, isMobile, playAll, playSection, lastWatchedIdx }) {
+  const [idx, setIdx] = useState(0);
+  const timerRef = useRef(null);
+  const bg = isMobile ? "#070707" : "#08080F";
+  const heroH = isMobile ? "clamp(220px,56vw,340px)" : "clamp(440px,52vh,580px)";
+
+  const startAuto = useCallback(() => {
+    clearInterval(timerRef.current);
+    timerRef.current = setInterval(() => setIdx((i) => (i + 1) % sections.length), 6000);
+  }, [sections.length]);
+
+  useEffect(() => {
+    startAuto();
+    return () => clearInterval(timerRef.current);
+  }, [startAuto]);
+
+  const go = (dir) => {
+    setIdx((i) => (i + dir + sections.length) % sections.length);
+    startAuto();
+  };
+
+  const slide = sections[idx];
+  const last = lastWatchedIdx(slide.label);
+  const hasWatched = last >= 0;
+
+  return (
+    <div
+      style={{ position: "relative", width: "100%", height: heroH, overflow: "hidden", flexShrink: 0 }}
+      onMouseEnter={() => clearInterval(timerRef.current)}
+      onMouseLeave={startAuto}
+    >
+      {/* Animated slide */}
+      <AnimatePresence mode="sync">
+        <motion.div
+          key={slide.label}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.7 }}
+          style={{ position: "absolute", inset: 0 }}
+        >
+          <div style={{ position: "absolute", inset: 0, background: slide.poster ? `url('${slide.poster}') center top / cover no-repeat` : slide.config.gradient }} />
+          <div style={{ position: "absolute", inset: 0, background: `linear-gradient(to bottom, ${bg}88 0%, transparent 30%)` }} />
+          <div style={{ position: "absolute", inset: 0, background: `linear-gradient(to top, ${bg} 0%, ${bg}cc 22%, transparent 58%)` }} />
+          <div style={{ position: "absolute", inset: 0, background: `linear-gradient(to right, ${bg}cc 0%, transparent 50%)` }} />
+        </motion.div>
+      </AnimatePresence>
+
+      {/* Content */}
+      <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, padding: isMobile ? "1.25rem 1.25rem 1.5rem" : "2rem 3rem 2.5rem", zIndex: 2 }}>
+        {/* Badge */}
+        <div style={{ display: "inline-flex", alignItems: "center", gap: "0.4rem", background: `${slide.config.accent}28`, border: `1px solid ${slide.config.accent}55`, borderRadius: "2rem", padding: "0.2rem 0.75rem", marginBottom: "0.8rem" }}>
+          <span style={{ fontSize: "0.9rem" }}>{slide.config.icon}</span>
+          <span style={{ fontSize: "0.58rem", fontWeight: 800, letterSpacing: "0.18em", textTransform: "uppercase", color: slide.config.accent }}>
+            {slide.items.length} {slide.items.length === 1 ? "Video" : "Videos"}
+          </span>
+        </div>
+
+        <h2 style={{ fontFamily: "Outfit,sans-serif", fontWeight: 900, fontSize: isMobile ? "clamp(1.5rem,6vw,2rem)" : "clamp(2rem,3.5vw,3rem)", color: "#fff", textTransform: "uppercase", letterSpacing: "0.05em", textShadow: "0 2px 24px rgba(0,0,0,0.9)", marginBottom: isMobile ? "0.75rem" : "0.65rem", lineHeight: 1 }}>
+          {slide.label}
+        </h2>
+
+        {!isMobile && (
+          <p style={{ fontSize: "0.88rem", color: "rgba(255,255,255,0.55)", marginBottom: "1.4rem", maxWidth: 480, lineHeight: 1.6, fontWeight: 500 }}>
+            {hasWatched
+              ? `You left off on episode ${last + 1}. Pick up where you stopped.`
+              : `${slide.items.length} episode${slide.items.length !== 1 ? "s" : ""} ready to watch.`}
+          </p>
+        )}
+
+        <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+          {hasWatched ? (
+            <button
+              onClick={() => playSection(slide.label, last)}
+              style={{ padding: isMobile ? "0.55rem 1.2rem" : "0.75rem 1.75rem", borderRadius: "0.5rem", fontFamily: "Outfit,sans-serif", fontWeight: 800, fontSize: isMobile ? "0.78rem" : "0.9rem", letterSpacing: "0.06em", textTransform: "uppercase", color: "#fff", background: slide.config.accent, border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: "0.4rem" }}
+            >
+              ▶ Continue Watching — Ep {last + 1}
+            </button>
+          ) : (
+            <button
+              onClick={() => playAll(slide.label)}
+              style={{ padding: isMobile ? "0.55rem 1.2rem" : "0.75rem 1.75rem", borderRadius: "0.5rem", fontFamily: "Outfit,sans-serif", fontWeight: 800, fontSize: isMobile ? "0.78rem" : "0.9rem", letterSpacing: "0.06em", textTransform: "uppercase", color: "#fff", background: slide.config.accent, border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: "0.4rem" }}
+            >
+              ▶ Watch Now
+            </button>
+          )}
+          {!isMobile && hasWatched && (
+            <button
+              onClick={() => playAll(slide.label)}
+              style={{ padding: "0.72rem 1.4rem", borderRadius: "0.5rem", fontFamily: "Outfit,sans-serif", fontWeight: 700, fontSize: "0.85rem", color: "rgba(255,255,255,0.8)", background: "rgba(255,255,255,0.1)", border: "1px solid rgba(255,255,255,0.16)", cursor: "pointer", backdropFilter: "blur(8px)" }}
+            >
+              ↺ Start Over
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Prev / Next arrows (desktop) */}
+      {!isMobile && sections.length > 1 && (
+        <>
+          <button
+            onClick={() => go(-1)}
+            style={{ position: "absolute", left: "1rem", top: "50%", transform: "translateY(-50%)", zIndex: 3, width: 44, height: 44, borderRadius: "50%", background: "rgba(0,0,0,0.5)", backdropFilter: "blur(8px)", border: "1px solid rgba(255,255,255,0.15)", color: "#fff", fontSize: "1.1rem", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}
+          >‹</button>
+          <button
+            onClick={() => go(1)}
+            style={{ position: "absolute", right: "1rem", top: "50%", transform: "translateY(-50%)", zIndex: 3, width: 44, height: 44, borderRadius: "50%", background: "rgba(0,0,0,0.5)", backdropFilter: "blur(8px)", border: "1px solid rgba(255,255,255,0.15)", color: "#fff", fontSize: "1.1rem", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}
+          >›</button>
+        </>
+      )}
+
+      {/* Dot indicators */}
+      {sections.length > 1 && (
+        <div style={{ position: "absolute", bottom: isMobile ? "0.6rem" : "1rem", right: isMobile ? "1rem" : "3rem", zIndex: 3, display: "flex", gap: "0.4rem", alignItems: "center" }}>
+          {sections.map((_, i) => (
+            <button
+              key={i}
+              onClick={() => { setIdx(i); startAuto(); }}
+              style={{ width: i === idx ? 20 : 6, height: 6, borderRadius: 3, background: i === idx ? slide.config.accent : "rgba(255,255,255,0.3)", border: "none", padding: 0, cursor: "pointer", transition: "all 0.3s ease" }}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function StreamingContent({ sections, isMobile, playAll, playSection, lastWatchedIdx }) {
+  const bg = isMobile ? "#070707" : "#08080F";
+  const rowPadX = isMobile ? "1rem" : "2rem";
+
+  return (
+    <div className="flex-1 overflow-y-auto" style={{ background: bg, scrollbarWidth: "none" }}>
+
+      {/* ── Hero carousel ── */}
+      <HeroCarousel
+        sections={sections}
+        isMobile={isMobile}
+        playAll={playAll}
+        playSection={playSection}
+        lastWatchedIdx={lastWatchedIdx}
+      />
+
+      {/* ── Content rows ── */}
+      <div style={{ paddingBottom: isMobile ? "2rem" : "3rem" }}>
+        {sections.map((section) => {
+          const last = lastWatchedIdx(section.label);
+          return (
+            <div key={section.label} style={{ marginTop: isMobile ? "1.75rem" : "2.25rem" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", padding: `0 ${rowPadX}`, marginBottom: "0.75rem" }}>
+                <span style={{ fontSize: isMobile ? "1rem" : "1.1rem" }}>{section.config.icon}</span>
+                <span style={{ fontFamily: "Outfit,sans-serif", fontWeight: 800, fontSize: isMobile ? "0.82rem" : "1rem", color: "#fff", letterSpacing: "0.06em", textTransform: "uppercase" }}>
+                  {section.label}
+                </span>
+                <span style={{ marginLeft: "auto", fontSize: isMobile ? "0.6rem" : "0.72rem", color: "rgba(255,255,255,0.28)", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase" }}>
+                  {section.items.length} Videos
+                </span>
+              </div>
+              <div style={{ display: "flex", gap: isMobile ? "0.55rem" : "0.75rem", overflowX: "auto", padding: `0.1rem ${rowPadX} 0.75rem`, scrollbarWidth: "none", msOverflowStyle: "none" }}>
+                {section.items.map((item, i) => (
+                  <VideoCard
+                    key={item.id}
+                    item={item}
+                    idx={i}
+                    last={last}
+                    section={section}
+                    isMobile={isMobile}
+                    onPlay={() => playSection(section.label, i)}
+                  />
+                ))}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function ComingSoon({ label }) {
+  return (
+    <div className="flex-1 flex flex-col items-center justify-center gap-3">
+      <span style={{ fontSize: "2.5rem", opacity: 0.4 }}>🚧</span>
+      <p style={{ fontFamily: "Outfit, sans-serif", fontWeight: 800, fontSize: "0.75rem", letterSpacing: "0.2em", textTransform: "uppercase", color: "rgba(255,255,255,0.25)" }}>
+        {label} — Coming Soon
+      </p>
+    </div>
+  );
+}
+
 export default function KidsShell() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -67,32 +342,15 @@ export default function KidsShell() {
   const [media, setMedia] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // Tab: "videos" | "timer" | "gallery"
-  const [tab, setTab] = useState("videos");
-
-  // Show carousel
-  const [cardIdx, setCardIdx] = useState(0);
-  const trackRef = useRef(null);
-  const touchStart = useRef(null);
-
-  // Action sheet
-  const [actionSheet, setActionSheet] = useState(null); // section label or null
-
-  // Video list drawer
-  const [listSheet, setListSheet] = useState(null); // section label or null
-
-  // Player state
-  const [playerState, setPlayerState] = useState(null); // { playlist, startIdx, accentColor, sectionLabel }
-
-  // Check-in overlay
+  const [tab, setTab] = useState("home");
+  const [playerState, setPlayerState] = useState(null);
   const [checkinOpen, setCheckinOpen] = useState(false);
-
-  // Check-in timer picker
   const [pickerOpen, setPickerOpen] = useState(false);
 
-  const fireCheckin = useCallback(() => {
-    setCheckinOpen(true);
-  }, []);
+  const isMobile = useIsMobile();
+  const Layout = isMobile ? KidsLayout : KidsDesktopLayout;
+
+  const fireCheckin = useCallback(() => setCheckinOpen(true), []);
 
   const { intervalMins, setIntervalMins, scheduleCheckin } = useCheckinTimer({
     profileId: id,
@@ -104,14 +362,12 @@ export default function KidsShell() {
     scheduleCheckin(intervalMins);
   }, [scheduleCheckin, intervalMins]);
 
-  // Auth guard
   useEffect(() => {
     const raw = sessionStorage.getItem(`mh_profile_${id}`);
     if (!raw) { navigate("/", { replace: true }); return; }
     setProfile(JSON.parse(raw));
   }, [id, navigate]);
 
-  // Load media
   useEffect(() => {
     if (!profile) return;
     listMedia(id)
@@ -138,102 +394,50 @@ export default function KidsShell() {
     navigate("/", { replace: true });
   };
 
-  // Carousel swipe
-  const onTouchStart = (e) => { touchStart.current = e.touches[0].clientX; };
-  const onTouchEnd = (e) => {
-    if (touchStart.current === null) return;
-    const dx = e.changedTouches[0].clientX - touchStart.current;
-    touchStart.current = null;
-    if (Math.abs(dx) < 40) return;
-    if (dx < 0 && cardIdx < sections.length - 1) setCardIdx(cardIdx + 1);
-    if (dx > 0 && cardIdx > 0) setCardIdx(cardIdx - 1);
+  const lastWatchedIdx = (label) => {
+    const stored = localStorage.getItem(`mh_last_${id}_${label}`);
+    return stored !== null ? parseInt(stored, 10) : -1;
   };
 
-  const openPlayAll = (label) => {
+  const playSection = (label, startIdx) => {
     const section = sections.find((s) => s.label === label);
     if (!section) return;
-    const stored = parseInt(localStorage.getItem(`mh_last_${id}_${label}`) || "0", 10);
-    const startIdx = Math.min(stored, section.items.length - 1);
     setPlayerState({
       playlist: section.items,
       startIdx,
       accentColor: section.config.accent,
       sectionLabel: label,
     });
-    setActionSheet(null);
   };
 
-  const openVideoList = (label) => {
-    setActionSheet(null);
-    setListSheet(label);
-  };
-
-  const playFromList = (label, idx) => {
+  const playAll = (label) => {
+    const last = lastWatchedIdx(label);
     const section = sections.find((s) => s.label === label);
     if (!section) return;
-    setPlayerState({
-      playlist: section.items,
-      startIdx: idx,
-      accentColor: section.config.accent,
-      sectionLabel: label,
-    });
-    setListSheet(null);
-  };
-
-  const lastWatchedIdx = (label) => {
-    const stored = localStorage.getItem(`mh_last_${id}_${label}`);
-    return stored !== null ? parseInt(stored, 10) : -1;
+    const startIdx = last >= 0 ? Math.min(last, section.items.length - 1) : 0;
+    playSection(label, startIdx);
   };
 
   if (!profile) return null;
 
-  const activeSection = sections[cardIdx];
+  // Hero = first section that has a last-watched entry, otherwise first section
+  const heroSection =
+    sections.find((s) => lastWatchedIdx(s.label) >= 0) || sections[0] || null;
+  const heroLast = heroSection ? lastWatchedIdx(heroSection.label) : -1;
 
   return (
-    <div
-      className="fixed inset-0 flex flex-col overflow-hidden"
-      style={{ background: "#070707", fontFamily: "'Nunito', Arial, sans-serif" }}
-    >
-      {/* ── Header ── */}
-      <header
-        className="flex items-center justify-between px-4 py-3 shrink-0"
-        style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}
+    <>
+      <Layout
+        profileName={profile.name}
+        intervalMins={intervalMins}
+        onTimerClick={() => setPickerOpen(true)}
+        onLogout={handleLogout}
+        tabs={TABS}
+        activeTab={tab}
+        onTabChange={setTab}
       >
-        <span
-          className="text-sm font-black tracking-widest uppercase text-white/80"
-          style={{ fontFamily: "Outfit, sans-serif" }}
-        >
-          {profile.name}
-        </span>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => setPickerOpen(true)}
-            className="px-3 py-1.5 rounded-full text-xs font-black tracking-widest"
-            style={{
-              border: "1px solid rgba(255,255,255,0.15)",
-              background: intervalMins > 0 ? "rgba(255,215,0,0.12)" : "transparent",
-              color: intervalMins > 0 ? "rgba(255,215,0,0.9)" : "rgba(255,255,255,0.4)",
-            }}
-          >
-            ⏰ {intervalMins > 0 ? `${intervalMins}m` : "OFF"}
-          </button>
-          <button
-            onClick={handleLogout}
-            className="w-9 h-9 rounded-full flex items-center justify-center"
-            style={{ border: "1px solid rgba(255,255,255,0.12)", color: "rgba(255,255,255,0.45)" }}
-            aria-label="Exit"
-          >
-            <LogOut className="w-4 h-4" strokeWidth={1.75} />
-          </button>
-        </div>
-      </header>
-
-      {/* ── Main content area ── */}
-      <div className="flex-1 overflow-hidden flex flex-col min-h-0">
-        {tab === "timer" ? (
-          <KidsTimer checkinOpen={checkinOpen} onCheckin={fireCheckin} onDismissCheckin={handleDismissCheckin} intervalMins={intervalMins} scheduleCheckin={scheduleCheckin} />
-        ) : tab === "gallery" ? (
-          <KidsGallery />
+        {tab !== "home" ? (
+          <ComingSoon label={TABS.find((t) => t.key === tab)?.label || tab} />
         ) : loading ? (
           <div className="flex-1 flex items-center justify-center text-white/30 text-sm">
             Loading…
@@ -243,347 +447,15 @@ export default function KidsShell() {
             No videos yet.
           </div>
         ) : (
-          /* ── Show carousel ── */
-          <div
-            className="flex-1 flex flex-col items-center justify-center overflow-hidden"
-            style={{
-              background: `radial-gradient(ellipse 120% 52% at 50% 78%, ${activeSection?.config.ambience || "transparent"} 0%, transparent 68%)`,
-            }}
-          >
-            {/* Cards track */}
-            <div
-              className="w-full overflow-hidden"
-              onTouchStart={onTouchStart}
-              onTouchEnd={onTouchEnd}
-            >
-              <div
-                ref={trackRef}
-                style={{
-                  display: "flex",
-                  transition: "transform 0.35s cubic-bezier(0.22,1,0.36,1)",
-                  transform: `translateX(calc(50% - 40vw - ${cardIdx * 82}vw))`,
-                }}
-              >
-                {sections.map((s, i) => {
-                  const dist = Math.abs(i - cardIdx);
-                  const scale = dist === 0 ? 1 : 0.88 - dist * 0.04;
-                  const opacity = dist === 0 ? 1 : 0.5 - dist * 0.1;
-                  return (
-                    <div
-                      key={s.label}
-                      onClick={() => {
-                        if (i === cardIdx) setActionSheet(s.label);
-                        else setCardIdx(i);
-                      }}
-                      style={{
-                        width: "80vw",
-                        maxWidth: 520,
-                        height: "clamp(260px, 55vh, 420px)",
-                        flexShrink: 0,
-                        marginRight: "2vw",
-                        borderRadius: "1.25rem",
-                        overflow: "hidden",
-                        position: "relative",
-                        transform: `scale(${scale})`,
-                        opacity,
-                        transition: "transform 0.35s cubic-bezier(0.22,1,0.36,1), opacity 0.35s ease",
-                        cursor: "pointer",
-                        WebkitTapHighlightColor: "transparent",
-                        boxShadow: dist === 0 ? `0 20px 60px -15px ${s.config.glow}` : "none",
-                      }}
-                    >
-                      {/* Background */}
-                      <div
-                        style={{
-                          position: "absolute",
-                          inset: 0,
-                          background: s.poster
-                            ? `${s.config.tint}, url('${s.poster}') center top / cover, ${s.config.gradient}`
-                            : s.config.gradient,
-                        }}
-                      />
-                      {/* Shimmer overlay */}
-                      <div
-                        style={{
-                          position: "absolute",
-                          inset: 0,
-                          background:
-                            "linear-gradient(135deg,rgba(255,255,255,0.07) 0%,transparent 50%,rgba(0,0,0,0.2) 100%)",
-                        }}
-                      />
-                      {/* Icon */}
-                      <div
-                        style={{
-                          position: "absolute",
-                          top: "1.2rem",
-                          right: "1.4rem",
-                          fontSize: "2.8rem",
-                          filter: "drop-shadow(0 2px 8px rgba(0,0,0,0.5))",
-                        }}
-                      >
-                        {s.config.icon}
-                      </div>
-                      {/* Label */}
-                      <div
-                        style={{
-                          position: "absolute",
-                          bottom: "1.5rem",
-                          left: "1.5rem",
-                          right: "1.5rem",
-                        }}
-                      >
-                        <p
-                          style={{
-                            fontFamily: "Outfit, sans-serif",
-                            fontWeight: 700,
-                            fontSize: "clamp(1.4rem,4vw,1.9rem)",
-                            color: "#fff",
-                            textShadow: "0 2px 12px rgba(0,0,0,0.6)",
-                            letterSpacing: "0.04em",
-                            textTransform: "uppercase",
-                          }}
-                        >
-                          {s.label}
-                        </p>
-                        <p
-                          style={{
-                            fontSize: "0.72rem",
-                            color: "rgba(255,255,255,0.6)",
-                            letterSpacing: "0.18em",
-                            fontWeight: 800,
-                            marginTop: "0.2rem",
-                          }}
-                        >
-                          {s.items.length} VIDEO{s.items.length !== 1 ? "S" : ""}
-                        </p>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Dot indicators */}
-            <div className="flex gap-2 mt-4">
-              {sections.map((_, i) => (
-                <button
-                  key={i}
-                  onClick={() => setCardIdx(i)}
-                  style={{
-                    width: i === cardIdx ? 20 : 6,
-                    height: 6,
-                    borderRadius: 3,
-                    background: i === cardIdx ? (activeSection?.config.accent || "#fff") : "rgba(255,255,255,0.25)",
-                    border: "none",
-                    padding: 0,
-                    transition: "all 0.3s ease",
-                    cursor: "pointer",
-                  }}
-                  aria-label={`Show ${i + 1}`}
-                />
-              ))}
-            </div>
-
-            {/* Tap hint */}
-            {sections.length > 0 && (
-              <p
-                className="mt-3 text-[10px] tracking-widest uppercase"
-                style={{ color: "rgba(255,255,255,0.25)", fontWeight: 800 }}
-              >
-                Tap card to play
-              </p>
-            )}
-          </div>
+          <StreamingContent
+            sections={sections}
+            isMobile={isMobile}
+            playAll={playAll}
+            playSection={playSection}
+            lastWatchedIdx={lastWatchedIdx}
+          />
         )}
-      </div>
-
-      {/* ── Bottom nav ── */}
-      <nav
-        className="flex shrink-0"
-        style={{ borderTop: "1px solid rgba(255,255,255,0.06)", background: "#0a0a0d" }}
-      >
-        {[
-          { key: "videos", icon: "🎬", label: "Videos" },
-          { key: "timer", icon: "⏱", label: "Timer" },
-          { key: "gallery", icon: "🖼", label: "Gallery" },
-        ].map((item) => (
-          <button
-            key={item.key}
-            onClick={() => setTab(item.key)}
-            className="flex-1 flex flex-col items-center justify-center gap-0.5 py-3"
-            style={{
-              color: tab === item.key ? "#FFD700" : "rgba(255,255,255,0.35)",
-              fontSize: "1.3rem",
-              border: "none",
-              background: "transparent",
-              WebkitTapHighlightColor: "transparent",
-              cursor: "pointer",
-            }}
-          >
-            <span>{item.icon}</span>
-            <span style={{ fontSize: "0.58rem", fontWeight: 800, letterSpacing: "0.1em" }}>
-              {item.label}
-            </span>
-          </button>
-        ))}
-      </nav>
-
-      {/* ── Action sheet (Play All / Video List) ── */}
-      <AnimatePresence>
-        {actionSheet && (
-          <>
-            <motion.div
-              key="as-backdrop"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="fixed inset-0 z-30"
-              style={{ background: "rgba(0,0,0,0.55)" }}
-              onClick={() => setActionSheet(null)}
-            />
-            <motion.div
-              key="as-sheet"
-              initial={{ y: "100%" }}
-              animate={{ y: 0 }}
-              exit={{ y: "100%" }}
-              transition={{ type: "spring", damping: 28, stiffness: 300 }}
-              className="fixed bottom-0 left-0 right-0 z-30 rounded-t-3xl overflow-hidden"
-              style={{
-                background: "#0d0d12",
-                borderTop: `3px solid ${sections.find((s) => s.label === actionSheet)?.config.accent || "#fff"}44`,
-                paddingBottom: "env(safe-area-inset-bottom, 0px)",
-              }}
-            >
-              <div className="px-6 pt-5 pb-2">
-                <p
-                  className="text-center text-xs uppercase tracking-widest mb-4"
-                  style={{ color: "rgba(255,255,255,0.4)", fontWeight: 800 }}
-                >
-                  {actionSheet}
-                </p>
-                {(() => {
-                  const s = sections.find((sec) => sec.label === actionSheet);
-                  const last = lastWatchedIdx(actionSheet);
-                  const accentColor = s?.config.accent || "#fff";
-                  return (
-                    <div className="flex flex-col gap-3 pb-4">
-                      <button
-                        onClick={() => openPlayAll(actionSheet)}
-                        className="w-full py-4 rounded-2xl font-black text-sm tracking-widest uppercase"
-                        style={{
-                          background: `linear-gradient(135deg, ${accentColor}cc, ${accentColor})`,
-                          color: "#fff",
-                          border: "none",
-                          WebkitTapHighlightColor: "transparent",
-                        }}
-                      >
-                        {last > 0 ? `▶ RESUME FROM VIDEO ${last + 1}` : "▶ PLAY ALL"}
-                      </button>
-                      <button
-                        onClick={() => openVideoList(actionSheet)}
-                        className="w-full py-4 rounded-2xl font-black text-sm tracking-widest uppercase"
-                        style={{
-                          background: "rgba(255,255,255,0.06)",
-                          border: "1px solid rgba(255,255,255,0.12)",
-                          color: "rgba(255,255,255,0.85)",
-                          WebkitTapHighlightColor: "transparent",
-                        }}
-                      >
-                        ☰ VIDEO LIST
-                      </button>
-                    </div>
-                  );
-                })()}
-              </div>
-            </motion.div>
-          </>
-        )}
-      </AnimatePresence>
-
-      {/* ── Video list sheet ── */}
-      <AnimatePresence>
-        {listSheet && (
-          <>
-            <motion.div
-              key="list-backdrop"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="fixed inset-0 z-30"
-              style={{ background: "rgba(0,0,0,0.7)" }}
-              onClick={() => setListSheet(null)}
-            />
-            <motion.div
-              key="list-sheet"
-              initial={{ y: "100%" }}
-              animate={{ y: 0 }}
-              exit={{ y: "100%" }}
-              transition={{ type: "spring", damping: 28, stiffness: 300 }}
-              className="fixed bottom-0 left-0 right-0 z-30 rounded-t-3xl overflow-hidden flex flex-col"
-              style={{
-                background: "#0d0d12",
-                maxHeight: "80dvh",
-                borderTop: `3px solid ${sections.find((s) => s.label === listSheet)?.config.accent || "#fff"}44`,
-                paddingBottom: "env(safe-area-inset-bottom, 0px)",
-              }}
-            >
-              <div className="flex items-center justify-between px-5 pt-4 pb-2 shrink-0">
-                <p className="text-xs uppercase tracking-widest font-black" style={{ color: "rgba(255,255,255,0.4)" }}>
-                  {listSheet}
-                </p>
-                <button onClick={() => setListSheet(null)} style={{ color: "rgba(255,255,255,0.4)", background: "none", border: "none", padding: 4 }}>
-                  <X className="w-4 h-4" strokeWidth={1.75} />
-                </button>
-              </div>
-              <div className="overflow-y-auto px-4 pb-4">
-                {(() => {
-                  const s = sections.find((sec) => sec.label === listSheet);
-                  const last = lastWatchedIdx(listSheet);
-                  const accentColor = s?.config.accent || "#fff";
-                  return s?.items.map((item, i) => (
-                    <button
-                      key={item.id}
-                      onClick={() => playFromList(listSheet, i)}
-                      className="w-full flex items-center gap-3 py-3 px-3 rounded-xl mb-1 text-left"
-                      style={{
-                        background: i === last ? `${accentColor}15` : "rgba(255,255,255,0.03)",
-                        border: i === last ? `1px solid ${accentColor}40` : "1px solid transparent",
-                        WebkitTapHighlightColor: "transparent",
-                      }}
-                    >
-                      <span
-                        className="shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-xs font-black"
-                        style={{
-                          background: i === last ? accentColor : "rgba(255,255,255,0.1)",
-                          color: "#fff",
-                        }}
-                      >
-                        {i + 1}
-                      </span>
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm font-bold text-white truncate">{item.title}</p>
-                        {item.description && (
-                          <p className="text-[11px] truncate" style={{ color: "rgba(255,255,255,0.4)" }}>
-                            {item.description}
-                          </p>
-                        )}
-                      </div>
-                      {i === last && (
-                        <span
-                          className="shrink-0 text-[9px] font-black tracking-widest px-2 py-0.5 rounded-full"
-                          style={{ background: accentColor, color: "#fff" }}
-                        >
-                          LAST
-                        </span>
-                      )}
-                    </button>
-                  ));
-                })()}
-              </div>
-            </motion.div>
-          </>
-        )}
-      </AnimatePresence>
+      </Layout>
 
       {/* ── Check-in timer picker ── */}
       <AnimatePresence>
@@ -650,6 +522,6 @@ export default function KidsShell() {
 
       {/* ── Check-in overlay ── */}
       <KidsCheckinOverlay open={checkinOpen} onDismiss={handleDismissCheckin} />
-    </div>
+    </>
   );
 }
