@@ -32,6 +32,13 @@ export const THEMES = [
     swatch: "#D4A574",
     suggestedColor: "#D4A574",
   },
+  {
+    key: "kids",
+    name: "Kids Zone",
+    subtitle: "Big-card kid-friendly UI",
+    swatch: "#FFD700",
+    suggestedColor: "#FF6B00",
+  },
 ];
 
 export const THEME_KEYS = THEMES.map((t) => t.key);

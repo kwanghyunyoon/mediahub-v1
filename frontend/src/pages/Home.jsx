@@ -23,7 +23,7 @@ export default function Home() {
     sessionStorage.setItem(`mh_profile_${p.id}`, JSON.stringify(p));
     setProfilePasscode(p.id, passcode);
     setSelected(null);
-    navigate(`/profile/${p.id}`);
+    navigate(p.theme === "kids" ? `/kids/${p.id}` : `/profile/${p.id}`);
   };
 
   return (

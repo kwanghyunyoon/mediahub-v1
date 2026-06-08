@@ -4,6 +4,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { Toaster } from "@/components/ui/sonner";
 import Home from "@/pages/Home";
 import ProfileShell from "@/pages/ProfileShell";
+import KidsShell from "@/pages/KidsShell";
 import AdminLogin from "@/pages/AdminLogin";
 import AdminDashboard from "@/pages/AdminDashboard";
 
@@ -26,6 +27,7 @@ function AppRoutes() {
       <Routes location={location} key={location.pathname.split("/")[1] || "home"}>
         <Route path="/" element={<Page><Home /></Page>} />
         <Route path="/profile/:id" element={<Page><ProfileShell /></Page>} />
+        <Route path="/kids/:id" element={<KidsShell />} />
         <Route path="/admin" element={<Page><AdminLogin /></Page>} />
         <Route path="/admin/dashboard" element={<Page><AdminDashboard /></Page>} />
       </Routes>
