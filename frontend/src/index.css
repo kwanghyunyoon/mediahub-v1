@@ -6,7 +6,7 @@
 
 html,
 body {
-    background-color: #050507;
+    background-color: var(--mh-bg-page, #050507);
     color: #ffffff;
 }
 
@@ -36,6 +36,49 @@ body {
 code {
     font-family:
         source-code-pro, Menlo, Monaco, Consolas, "Courier New", monospace;
+}
+
+/* ── UI Theme CSS custom properties ────────────────────────────────────── */
+:root,
+[data-ui-theme="midnight"] {
+    --mh-bg-from: #05050a;
+    --mh-bg-to: #0d0d18;
+    --mh-bg-page: #050507;
+    --mh-card: #101015;
+    --mh-card-hover: #16161c;
+    --mh-border: rgba(255, 255, 255, 0.06);
+    --mh-subtext: rgba(255, 255, 255, 0.30);
+    --mh-glow: rgba(40, 40, 80, 0.30);
+}
+[data-ui-theme="ocean"] {
+    --mh-bg-from: #020c1b;
+    --mh-bg-to: #091d38;
+    --mh-bg-page: #020c1b;
+    --mh-card: #0a1628;
+    --mh-card-hover: #0e1f3a;
+    --mh-border: rgba(59, 130, 246, 0.14);
+    --mh-subtext: rgba(148, 196, 255, 0.45);
+    --mh-glow: rgba(15, 50, 120, 0.35);
+}
+[data-ui-theme="ember"] {
+    --mh-bg-from: #100804;
+    --mh-bg-to: #1c1008;
+    --mh-bg-page: #100804;
+    --mh-card: #18100a;
+    --mh-card-hover: #221610;
+    --mh-border: rgba(251, 146, 60, 0.14);
+    --mh-subtext: rgba(251, 191, 120, 0.45);
+    --mh-glow: rgba(180, 80, 20, 0.22);
+}
+[data-ui-theme="aurora"] {
+    --mh-bg-from: #06030e;
+    --mh-bg-to: #110826;
+    --mh-bg-page: #06030e;
+    --mh-card: #110825;
+    --mh-card-hover: #180d32;
+    --mh-border: rgba(139, 92, 246, 0.15);
+    --mh-subtext: rgba(196, 168, 255, 0.45);
+    --mh-glow: rgba(100, 50, 200, 0.25);
 }
 
 @layer base {

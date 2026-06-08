@@ -7,6 +7,7 @@ import ProfileShell from "@/pages/ProfileShell";
 import KidsShell from "@/pages/KidsShell";
 import AdminLogin from "@/pages/AdminLogin";
 import AdminDashboard from "@/pages/AdminDashboard";
+import { useUiTheme } from "@/hooks/use-ui-theme";
 
 const Page = ({ children }) => (
   <motion.div
@@ -35,9 +36,15 @@ function AppRoutes() {
   );
 }
 
+function ThemeRoot() {
+  useUiTheme();
+  return null;
+}
+
 export default function App() {
   return (
-    <div className="App min-h-screen bg-[#050507] text-white" data-testid="app-root">
+    <div className="App min-h-screen text-white" style={{ backgroundColor: "var(--mh-bg-page, #050507)" }} data-testid="app-root">
+      <ThemeRoot />
       <BrowserRouter>
         <AppRoutes />
       </BrowserRouter>
