@@ -220,6 +220,13 @@ export default function ProfileShell() {
 
   const rgb = useMemo(() => (profile ? hexToRgb(profile.color) : "255,255,255"), [profile]);
 
+  // Reject any backgroundUrl that doesn't start with http(s) — guards against
+  // CSS injection via a tampered sessionStorage value.
+  const safeBgUrl = useMemo(() => {
+    const u = profile?.backgroundUrl;
+    return u && /^https?:\/\//i.test(u) ? u : null;
+  }, [profile]);
+
   const grouped = useMemo(() => {
     if (!profile) return [];
     return profile.sections.map((label) => ({
@@ -269,7 +276,7 @@ export default function ProfileShell() {
     ? "bg-[#18120c] bg-studio-paper text-[#f0e5d2]"
     : "";
 
-  const hasBg = !!profile.backgroundUrl;
+  const hasBg = !!safeBgUrl;
   const sectionsWithContent = grouped.filter((g) => g.items.length > 0);
   const rowPadX = isMobile ? "1rem" : "2rem";
 
@@ -282,7 +289,7 @@ export default function ProfileShell() {
         "--p-color": profile.color,
         "--p-rgb": rgb,
         ...(hasBg && {
-          backgroundImage: `linear-gradient(rgba(5,5,7,0.82) 0%, rgba(5,5,7,0.94) 100%), url(${profile.backgroundUrl})`,
+          backgroundImage: `linear-gradient(rgba(5,5,7,0.82) 0%, rgba(5,5,7,0.94) 100%), url(${safeBgUrl})`,
           backgroundSize: "cover",
           backgroundPosition: "center",
           backgroundAttachment: "fixed",

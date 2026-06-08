@@ -1,12 +1,132 @@
 # MediaHub v1 — Security Audit & Fixes
 
+**Latest audit date:** 2026-06-08  
+**Scope (round 2):** Cloudflare Worker (`backend-workers/src/index.ts`) + React frontend (`frontend/src/`)  
+**Status (round 2):** All 5 new issues fixed. See round 1 below for original Python-backend findings.
+
+---
+
+## Round 2 — Worker Stack (2026-06-08)
+
+### Summary
+
+| # | Severity | Issue | Status |
+|---|----------|-------|--------|
+| 1 | Critical | MASTER_PASSCODE hardcoded in wrangler.toml | ✅ Fixed |
+| 2 | High | Admin routes lack rate limiting on passcode checks | ✅ Fixed |
+| 3 | Medium | backgroundUrl from sessionStorage injected unsanitized into CSS | ✅ Fixed |
+| 4 | Medium | sourceType not validated in media PUT endpoint | ✅ Fixed |
+| 5 | Low | No max-length limits on free-text backend fields | ✅ Fixed |
+
+---
+
+### [CRITICAL] MASTER_PASSCODE hardcoded in wrangler.toml
+
+**File:** `backend-workers/wrangler.toml`
+
+**Problem:**  
+`MASTER_PASSCODE = "1115"` was stored as a plain `[vars]` entry in wrangler.toml. This file is version-controlled, so the secret would be committed to git history and visible to anyone with repo access.
+
+**Fix:**  
+Removed the value from `[vars]`. It must now be set as a Cloudflare secret:
+```
+wrangler secret put MASTER_PASSCODE
+```
+A comment in wrangler.toml documents this requirement.
+
+---
+
+### [HIGH] Admin routes had no rate limiting on passcode checks
+
+**File:** `backend-workers/src/index.ts`
+
+**Problem:**  
+`POST /api/admin/verify` was rate-limited (5 attempts per 5 minutes per IP), but the four other admin routes that also check the admin passcode (`GET/POST/PUT/DELETE /api/admin/profiles`) used an inline check with no rate limiting. An attacker could brute-force the 4-digit PIN by calling those endpoints directly, completely bypassing the protected verify route.
+
+**Fix:**  
+Extracted a `requireAdmin(masterPasscode, headers, ip)` helper that performs the rate-limit check **before** comparing the passcode, then replaced all four inline admin passcode checks with this helper. Every admin passcode attempt now shares the same per-IP rate-limit counter.
+
+---
+
+### [MEDIUM] backgroundUrl from sessionStorage injected unsanitized into CSS
+
+**File:** `frontend/src/pages/ProfileShell.jsx`
+
+**Problem:**  
+After verifying a profile, the full profile object is serialized to `sessionStorage`. `ProfileShell` reads it back and injects `profile.backgroundUrl` directly into an inline CSS `url()` value:
+```js
+backgroundImage: `linear-gradient(...), url(${profile.backgroundUrl})`
+```
+If an attacker tampers with sessionStorage (via XSS or browser devtools), a crafted value like `x) } body { background: red; } .foo { color: green` can break out of the `url()` context and inject arbitrary CSS.
+
+**Fix:**  
+Added a `safeBgUrl` memo that only passes through values matching `/^https?:\/\//i`. All other values (including tampered ones) resolve to `null`, which suppresses the background entirely. The `hasBg` flag and the `url()` reference now use `safeBgUrl` instead of the raw field.
+
+---
+
+### [MEDIUM] sourceType not validated in media PUT endpoint
+
+**File:** `backend-workers/src/index.ts`
+
+**Problem:**  
+The `POST /api/profiles/:id/media` handler validated `sourceType` against `["direct", "embed"]`, but the `PUT /api/profiles/:id/media/:mediaId` handler accepted any string:
+```ts
+if (body.sourceType !== undefined) { fields.push("sourceType = ?"); values.push(body.sourceType); }
+```
+An authenticated user could set `sourceType` to an arbitrary value on any existing media item, causing unpredictable client-side behavior.
+
+**Fix:**  
+Added the missing validation before the field-builder loop:
+```ts
+if (body.sourceType !== undefined && !["direct", "embed"].includes(body.sourceType)) {
+  return c.json({ detail: "invalid sourceType" }, 422);
+}
+```
+
+---
+
+### [LOW] No max-length limits on free-text backend fields
+
+**File:** `backend-workers/src/index.ts`
+
+**Problem:**  
+The backend validated format (4-digit passcode, hex color, URL scheme) but placed no upper bound on string lengths for `name`, `icon`, `title`, `description`, `sectionLabel`, or URL fields. A user with valid credentials could send megabyte-sized strings that get stored in D1, causing oversized rows and bloated API responses.
+
+**Fix:**  
+Added length constants and enforced them in both create and update endpoints:
+
+| Field | Limit |
+|-------|-------|
+| `name` | 80 chars |
+| `icon` | 40 chars |
+| `sectionLabel` | 60 chars |
+| `title` | 120 chars |
+| `description` | 500 chars |
+| URL fields | 2 048 chars |
+
+---
+
+## Files Changed (round 2)
+
+| File | Changes |
+|------|---------|
+| `backend-workers/wrangler.toml` | Removed `MASTER_PASSCODE` from `[vars]`; added secret instructions comment |
+| `backend-workers/src/index.ts` | Added `requireAdmin()` helper with rate limiting; replaced 4 inline passcode checks; added `sourceType` validation to PUT; added length constants and checks across create/update endpoints |
+| `frontend/src/pages/ProfileShell.jsx` | Added `safeBgUrl` memo; replaced `profile.backgroundUrl` with `safeBgUrl` in CSS injection points |
+
+---
+
+---
+
+## Round 1 — Python Backend (2026-06-07)
+
 **Date:** 2026-06-07  
 **Scope:** Full-stack review of `/backend/server.py` and `/frontend/src/`  
 **Status:** Critical and High issues resolved. Medium/Low documented below.
 
 ---
 
-## Summary
+### Round 1 Summary
 
 | Severity | Count | Status |
 |----------|-------|--------|
@@ -17,7 +137,7 @@
 
 ---
 
-## Fixed Issues
+### Fixed Issues
 
 ### [CRITICAL] Media mutation endpoints had zero authentication
 
@@ -102,7 +222,7 @@ An unset `CORS_ORIGINS` now produces an empty allow-list. The `.env` file alread
 
 ---
 
-## Remaining Known Issues
+### Remaining Known Issues (Round 1)
 
 ### [MEDIUM] Admin passcode stored as plaintext in sessionStorage
 
@@ -183,7 +303,7 @@ plugins: [
 
 ---
 
-## Files Changed
+### Files Changed (Round 1)
 
 | File | Changes |
 |------|---------|

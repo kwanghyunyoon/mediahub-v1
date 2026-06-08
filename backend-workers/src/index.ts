@@ -47,6 +47,13 @@ const PASSCODE_RE = /^\d{4}$/;
 const HEX_RE = /^#[0-9A-Fa-f]{6}$/;
 const URL_RE = /^https?:\/\//i;
 
+const MAX_NAME = 80;
+const MAX_ICON = 40;
+const MAX_SECTION_LABEL = 60;
+const MAX_TITLE = 120;
+const MAX_DESC = 500;
+const MAX_URL = 2048;
+
 function nowIso(): string {
   return new Date().toISOString();
 }
@@ -133,9 +140,30 @@ function rlClear(key: string): void {
 }
 
 // ---------------------------------------------------------------------------
-// Auth helper — profile passcode OR admin master passcode required
+// Auth helpers
 // ---------------------------------------------------------------------------
 
+// Rate-limited admin passcode check — use on ALL admin routes, not just /verify.
+// Returns a 401/429 Response on failure, or null on success.
+function requireAdmin(
+  masterPasscode: string,
+  headers: Headers,
+  ip: string,
+): Response | null {
+  const rlKey = `admin:${ip}`;
+  const blocked = rlCheck(rlKey);
+  if (blocked) return blocked;
+
+  const supplied = headers.get("X-Admin-Passcode");
+  if (!supplied || supplied !== masterPasscode) {
+    rlRecord(rlKey);
+    return err(401, "Invalid admin passcode");
+  }
+  rlClear(rlKey);
+  return null;
+}
+
+// Profile passcode OR admin master passcode required
 async function requireProfileOrAdmin(
   db: D1Database,
   masterPasscode: string,
@@ -253,10 +281,9 @@ app.post("/api/profiles/:id/verify", async (c) => {
 // ---------------------------------------------------------------------------
 
 app.get("/api/admin/profiles", async (c) => {
-  const adminPasscode = c.req.header("X-Admin-Passcode");
-  if (adminPasscode !== c.env.MASTER_PASSCODE) {
-    return c.json({ detail: "Invalid admin passcode" }, 401);
-  }
+  const ip = c.req.raw.headers.get("CF-Connecting-IP") ?? "unknown";
+  const denied = requireAdmin(c.env.MASTER_PASSCODE, c.req.raw.headers, ip);
+  if (denied) return denied;
   const { results } = await c.env.DB.prepare(
     "SELECT * FROM profiles ORDER BY createdAt ASC"
   ).all<ProfileRow>();
@@ -268,10 +295,9 @@ app.get("/api/admin/profiles", async (c) => {
 // ---------------------------------------------------------------------------
 
 app.post("/api/admin/profiles", async (c) => {
-  const adminPasscode = c.req.header("X-Admin-Passcode");
-  if (adminPasscode !== c.env.MASTER_PASSCODE) {
-    return c.json({ detail: "Invalid admin passcode" }, 401);
-  }
+  const ip = c.req.raw.headers.get("CF-Connecting-IP") ?? "unknown";
+  const denied = requireAdmin(c.env.MASTER_PASSCODE, c.req.raw.headers, ip);
+  if (denied) return denied;
 
   const body = await c.req.json<{
     name: string; passcode: string; color: string; icon: string;
@@ -279,11 +305,16 @@ app.post("/api/admin/profiles", async (c) => {
   }>();
 
   if (!body.name?.trim()) return c.json({ detail: "name is required" }, 422);
+  if (body.name.trim().length > MAX_NAME) return c.json({ detail: `name must be ${MAX_NAME} characters or fewer` }, 422);
   if (!PASSCODE_RE.test(body.passcode)) return c.json({ detail: "passcode must be 4 digits" }, 422);
   if (!HEX_RE.test(body.color)) return c.json({ detail: "color must be hex like #RRGGBB" }, 422);
   if (!body.icon?.trim()) return c.json({ detail: "icon is required" }, 422);
+  if (body.icon.trim().length > MAX_ICON) return c.json({ detail: `icon must be ${MAX_ICON} characters or fewer` }, 422);
   if (body.backgroundUrl && !URL_RE.test(body.backgroundUrl)) {
     return c.json({ detail: "backgroundUrl must start with http:// or https://" }, 422);
+  }
+  if (body.backgroundUrl && body.backgroundUrl.length > MAX_URL) {
+    return c.json({ detail: `backgroundUrl must be ${MAX_URL} characters or fewer` }, 422);
   }
 
   const sections = (body.sections ?? [])
@@ -311,10 +342,9 @@ app.post("/api/admin/profiles", async (c) => {
 // ---------------------------------------------------------------------------
 
 app.put("/api/admin/profiles/:id", async (c) => {
-  const adminPasscode = c.req.header("X-Admin-Passcode");
-  if (adminPasscode !== c.env.MASTER_PASSCODE) {
-    return c.json({ detail: "Invalid admin passcode" }, 401);
-  }
+  const ip = c.req.raw.headers.get("CF-Connecting-IP") ?? "unknown";
+  const denied = requireAdmin(c.env.MASTER_PASSCODE, c.req.raw.headers, ip);
+  if (denied) return denied;
 
   const id = c.req.param("id");
   const existing = await c.env.DB.prepare("SELECT * FROM profiles WHERE id = ?")
@@ -332,8 +362,17 @@ app.put("/api/admin/profiles/:id", async (c) => {
   if (body.color !== undefined && !HEX_RE.test(body.color)) {
     return c.json({ detail: "color must be hex like #RRGGBB" }, 422);
   }
+  if (body.name !== undefined && body.name.trim().length > MAX_NAME) {
+    return c.json({ detail: `name must be ${MAX_NAME} characters or fewer` }, 422);
+  }
+  if (body.icon !== undefined && body.icon.trim().length > MAX_ICON) {
+    return c.json({ detail: `icon must be ${MAX_ICON} characters or fewer` }, 422);
+  }
   if (body.backgroundUrl && !URL_RE.test(body.backgroundUrl)) {
     return c.json({ detail: "backgroundUrl must start with http:// or https://" }, 422);
+  }
+  if (body.backgroundUrl && body.backgroundUrl.length > MAX_URL) {
+    return c.json({ detail: `backgroundUrl must be ${MAX_URL} characters or fewer` }, 422);
   }
 
   // Build only the fields that were actually sent
@@ -374,10 +413,9 @@ app.put("/api/admin/profiles/:id", async (c) => {
 // ---------------------------------------------------------------------------
 
 app.delete("/api/admin/profiles/:id", async (c) => {
-  const adminPasscode = c.req.header("X-Admin-Passcode");
-  if (adminPasscode !== c.env.MASTER_PASSCODE) {
-    return c.json({ detail: "Invalid admin passcode" }, 401);
-  }
+  const ip = c.req.raw.headers.get("CF-Connecting-IP") ?? "unknown";
+  const denied = requireAdmin(c.env.MASTER_PASSCODE, c.req.raw.headers, ip);
+  if (denied) return denied;
 
   const id = c.req.param("id");
   const result = await c.env.DB.prepare("DELETE FROM profiles WHERE id = ?")
@@ -420,12 +458,17 @@ app.post("/api/profiles/:id/media", async (c) => {
   }>();
 
   if (!body.title?.trim()) return c.json({ detail: "title is required" }, 422);
+  if (body.title.trim().length > MAX_TITLE) return c.json({ detail: `title must be ${MAX_TITLE} characters or fewer` }, 422);
   if (!body.sectionLabel?.trim()) return c.json({ detail: "sectionLabel is required" }, 422);
+  if (body.sectionLabel.trim().length > MAX_SECTION_LABEL) return c.json({ detail: `sectionLabel must be ${MAX_SECTION_LABEL} characters or fewer` }, 422);
+  if (body.description && body.description.trim().length > MAX_DESC) return c.json({ detail: `description must be ${MAX_DESC} characters or fewer` }, 422);
   if (!["direct", "embed"].includes(body.sourceType)) return c.json({ detail: "invalid sourceType" }, 422);
   if (!URL_RE.test(body.sourceUrl)) return c.json({ detail: "sourceUrl must start with http:// or https://" }, 422);
+  if (body.sourceUrl.length > MAX_URL) return c.json({ detail: `sourceUrl must be ${MAX_URL} characters or fewer` }, 422);
   if (body.posterUrl && !URL_RE.test(body.posterUrl)) {
     return c.json({ detail: "posterUrl must start with http:// or https://" }, 422);
   }
+  if (body.posterUrl && body.posterUrl.length > MAX_URL) return c.json({ detail: `posterUrl must be ${MAX_URL} characters or fewer` }, 422);
 
   // Auto-assign order if not provided
   let ordering = body.order;
@@ -504,11 +547,29 @@ app.put("/api/profiles/:id/media/:mediaId", async (c) => {
     sourceType: "direct" | "embed"; sourceUrl: string; posterUrl: string | null;
   }>>();
 
+  if (body.sourceType !== undefined && !["direct", "embed"].includes(body.sourceType)) {
+    return c.json({ detail: "invalid sourceType" }, 422);
+  }
+  if (body.title !== undefined && body.title.trim().length > MAX_TITLE) {
+    return c.json({ detail: `title must be ${MAX_TITLE} characters or fewer` }, 422);
+  }
+  if (body.sectionLabel !== undefined && body.sectionLabel.trim().length > MAX_SECTION_LABEL) {
+    return c.json({ detail: `sectionLabel must be ${MAX_SECTION_LABEL} characters or fewer` }, 422);
+  }
+  if (body.description !== undefined && body.description && body.description.trim().length > MAX_DESC) {
+    return c.json({ detail: `description must be ${MAX_DESC} characters or fewer` }, 422);
+  }
   if (body.sourceUrl !== undefined && !URL_RE.test(body.sourceUrl)) {
     return c.json({ detail: "sourceUrl must start with http:// or https://" }, 422);
   }
+  if (body.sourceUrl !== undefined && body.sourceUrl.length > MAX_URL) {
+    return c.json({ detail: `sourceUrl must be ${MAX_URL} characters or fewer` }, 422);
+  }
   if (body.posterUrl && !URL_RE.test(body.posterUrl)) {
     return c.json({ detail: "posterUrl must start with http:// or https://" }, 422);
+  }
+  if (body.posterUrl && body.posterUrl.length > MAX_URL) {
+    return c.json({ detail: `posterUrl must be ${MAX_URL} characters or fewer` }, 422);
   }
 
   const fields: string[] = [];

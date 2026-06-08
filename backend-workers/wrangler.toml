@@ -4,7 +4,8 @@ compatibility_date = "2024-07-25"
 compatibility_flags = ["nodejs_compat"]
 
 [vars]
-MASTER_PASSCODE = "1115"
+# MASTER_PASSCODE must be set as a Cloudflare secret — never store it here.
+# Run: wrangler secret put MASTER_PASSCODE
 CORS_ORIGIN = "https://mediahub-bpx.pages.dev"
 
 [[d1_databases]]
