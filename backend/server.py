@@ -24,6 +24,7 @@ from motor.motor_asyncio import AsyncIOMotorClient
 import os
 import logging
 import re
+import hmac
 import time
 import json
 import asyncio
@@ -52,6 +53,7 @@ async def lifespan(_app: FastAPI):
     # Startup: idempotent seed + backfills
     try:
         await _seed_westwood_ranch()
+        await _seed_mcqueen_zone()
         await _backfill_media_order()
     except Exception as e:
         logger.exception(f"Startup tasks failed: {e}")
@@ -324,6 +326,10 @@ def _clear_fails(ip: str) -> None:
     _FAIL_LOG.pop(ip, None)
 
 
+def _safe_eq(a: str, b: str) -> bool:
+    return hmac.compare_digest(a.encode(), b.encode())
+
+
 # ---------- Media access gate (per-profile passcode header) ----------
 async def verify_profile_access(
     profile_id: str,
@@ -335,7 +341,7 @@ async def verify_profile_access(
     doc = await db.profiles.find_one({"id": profile_id}, {"_id": 0, "passcode": 1})
     if not doc:
         raise HTTPException(status_code=404, detail="Profile not found")
-    if doc["passcode"] != x_profile_passcode:
+    if not _safe_eq(doc["passcode"], x_profile_passcode):
         raise HTTPException(status_code=401, detail="Invalid profile passcode")
 
 
@@ -371,7 +377,7 @@ async def root():
 async def admin_verify(body: AdminVerify, request: Request):
     ip = _client_ip(request)
     _check_rate(ip)
-    if body.passcode != MASTER_PASSCODE:
+    if not _safe_eq(body.passcode, MASTER_PASSCODE):
         _record_fail(ip)
         raise HTTPException(status_code=401, detail="Invalid master passcode")
     _clear_fails(ip)
@@ -392,7 +398,7 @@ async def verify_profile_passcode(profile_id: str, body: PasscodeVerify, request
     doc = await db.profiles.find_one({"id": profile_id}, {"_id": 0})
     if not doc:
         raise HTTPException(status_code=404, detail="Profile not found")
-    if body.passcode != doc.get("passcode"):
+    if not _safe_eq(doc.get("passcode", ""), body.passcode):
         _record_fail(ip)
         raise HTTPException(status_code=401, detail="Wrong passcode")
     _clear_fails(ip)
@@ -801,6 +807,92 @@ async def _seed_westwood_ranch() -> None:
     logger.info(f"Seeded example profile '{WESTERN_NAME}' with {len(docs)} media items.")
 
 
+async def _seed_mcqueen_zone() -> None:
+    """Seed the McQueen Zone kids' profile with 18 videos. Idempotent."""
+    R2 = "https://pub-18415c7397b94c2d9a7b0f33a9846df4.r2.dev"
+    POSTERS = {
+        "Cars by Pixar":  "https://mcqueen-app.pages.dev/poster-mcqueen.jpg",
+        "Bluey":          "https://mcqueen-app.pages.dev/poster-bluey.jpg",
+        "SuperKitties":   "https://mcqueen-app.pages.dev/poster-superkitties.jpg",
+        "Pocoyo":         "https://mcqueen-app.pages.dev/poster-pocoyo.jpg",
+    }
+
+    existing = await db.profiles.find_one({"name": "McQueen Zone"}, {"_id": 0, "id": 1})
+    if existing:
+        pid = existing["id"]
+        backfilled = 0
+        async for doc in db.media.find(
+            {"profileId": pid, "$or": [{"posterUrl": {"$exists": False}}, {"posterUrl": None}]},
+            {"_id": 0, "id": 1, "sectionLabel": 1},
+        ).limit(100):
+            url = POSTERS.get(doc.get("sectionLabel", ""))
+            if url:
+                await db.media.update_one(
+                    {"id": doc["id"]}, {"$set": {"posterUrl": url, "updatedAt": _now_iso()}}
+                )
+                backfilled += 1
+        if backfilled:
+            logger.info(f"Backfilled posters on {backfilled} McQueen Zone media items.")
+        return
+
+    now = _now_iso()
+    pid = str(uuid.uuid4())
+    await db.profiles.insert_one({
+        "id": pid,
+        "name": "McQueen Zone",
+        "passcode": "8619",
+        "color": "#FF5200",
+        "icon": "Clapperboard",
+        "sections": ["Cars by Pixar", "Bluey", "SuperKitties", "Pocoyo"],
+        "theme": "default",
+        "createdAt": now,
+        "updatedAt": now,
+    })
+
+    items = [
+        ("The Journey of Lightning McQueen", "Cars by Pixar", f"{R2}/mcqueen-journey.mp4"),
+        ("Mater's Tall Tales", "Cars by Pixar", f"{R2}/maters-tall-tales.mp4"),
+        ("Cars On The Road — Full Episodes 1–5", "Cars by Pixar", f"{R2}/cars-on-the-road.mp4"),
+        ("Every Mater's Tall Tale", "Cars by Pixar", f"{R2}/mater.mp4"),
+        ("McQueen's Off-Road Race", "Cars by Pixar", f"{R2}/cars-offroad-race.mp4"),
+        ("Bluey Shorts", "Bluey", f"{R2}/1.mp4"),
+        ("Bluey Episodes Part 1", "Bluey", f"{R2}/2a.mp4"),
+        ("Bluey Episodes Part 2", "Bluey", f"{R2}/2b.mp4"),
+        ("Bluey — 18 Full Episodes", "Bluey", f"{R2}/bluey-18.mp4"),
+        ("Bluey Full Seasons 1–3", "Bluey", f"{R2}/bluey-seasons-1-3.mp4"),
+        ("S1 E1: The Great Yarn Caper", "SuperKitties", f"{R2}/superkitties-s1e1.mp4"),
+        ("Amara's Tiara", "SuperKitties", f"{R2}/superkitties-amaras-tiara.mp4"),
+        ("S1 E2: Fireworks Fright", "SuperKitties", f"{R2}/superkitties-s1e2.mp4"),
+        ("S1 E3: Silent Surprise", "SuperKitties", f"{R2}/superkitties-s1e3.mp4"),
+        ("Pocoyo — Episodes Part 1", "Pocoyo", f"{R2}/pocoyo1.mp4"),
+        ("Pocoyo — Episodes Part 2", "Pocoyo", f"{R2}/pocoyo2.mp4"),
+        ("Pocoyo Spa — Part 1", "Pocoyo", f"{R2}/pocoyoSPA1.mp4"),
+        ("Pocoyo Spa — Part 2", "Pocoyo", f"{R2}/pocoyoSPA2.mp4"),
+    ]
+
+    section_counters: dict = {}
+    docs = []
+    for title, section, src_url in items:
+        idx = section_counters.get(section, 0)
+        section_counters[section] = idx + 1
+        docs.append({
+            "id": str(uuid.uuid4()),
+            "profileId": pid,
+            "title": title,
+            "description": None,
+            "sectionLabel": section,
+            "sourceType": "direct",
+            "sourceUrl": src_url,
+            "posterUrl": POSTERS.get(section),
+            "order": idx,
+            "createdAt": now,
+            "updatedAt": now,
+        })
+    if docs:
+        await db.media.insert_many(docs)
+    logger.info(f"Seeded McQueen Zone profile with {len(docs)} media items.")
+
+
 @app.on_event("startup")
 async def _startup_seed():
     # superseded by the lifespan handler; kept as a no-op for any pre-existing tooling
@@ -837,7 +929,7 @@ async def _backfill_media_order() -> None:
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
-    allow_origins=os.environ.get('CORS_ORIGINS', '*').split(','),
+    allow_origins=[o for o in os.environ.get('CORS_ORIGINS', '').split(',') if o.strip()] or ['*'],
     allow_methods=["*"],
     allow_headers=["*"],
 )

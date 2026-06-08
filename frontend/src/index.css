@@ -18,6 +18,19 @@ body {
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     scroll-behavior: smooth;
+    /* Extend body to fill behind notch/home-indicator on iOS */
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+}
+
+/* Full-screen overlays need to reclaim the safe-area space that body consumed */
+.safe-area-override {
+    margin-top: calc(-1 * env(safe-area-inset-top));
+    margin-bottom: calc(-1 * env(safe-area-inset-bottom));
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
 }
 
 code {

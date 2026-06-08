@@ -143,7 +143,7 @@ export default function MediaForm({
       <DialogContent
         data-testid="media-form-dialog"
         style={{ "--p-color": accentColor, "--p-rgb": rgb }}
-        className="bg-[#0a0a0d] border-white/[0.08] text-white max-w-lg p-0 overflow-hidden"
+        className="bg-[#0a0a0d] border-white/[0.08] text-white max-w-lg p-0 overflow-y-auto max-h-[90dvh]"
       >
         <motion.form
           onSubmit={handleSubmit}

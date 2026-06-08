@@ -586,7 +586,7 @@ export default function ProfileShell() {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.3 }}
-            className="fixed inset-0 z-[200] flex items-center justify-center"
+            className="fixed inset-0 z-[200] flex items-center justify-center safe-area-override"
             style={{ backgroundColor: "rgba(5,5,7,0.88)", backdropFilter: "blur(12px)" }}
           >
             <motion.div

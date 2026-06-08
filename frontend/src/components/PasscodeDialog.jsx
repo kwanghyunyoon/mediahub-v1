@@ -3,7 +3,7 @@ import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/compone
 import { Button } from "@/components/ui/button";
 import { getIcon } from "@/lib/registry";
 import Keypad from "@/components/Keypad";
-import { verifyProfile } from "@/lib/api";
+import { verifyProfile, setProfilePasscode } from "@/lib/api";
 
 export default function PasscodeDialog({ profile, open, onClose, onSuccess }) {
   const [errorKey, setErrorKey] = useState(0);
@@ -17,7 +17,8 @@ export default function PasscodeDialog({ profile, open, onClose, onSuccess }) {
     setBusy(true);
     try {
       const data = await verifyProfile(profile.id, code);
-      onSuccess(data, code);
+      setProfilePasscode(profile.id, code);
+      onSuccess(data);
     } catch (e) {
       setErrorKey((k) => k + 1);
     } finally {

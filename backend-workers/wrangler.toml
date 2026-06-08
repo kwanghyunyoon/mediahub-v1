@@ -1,0 +1,16 @@
+name = "mediahub-api"
+main = "src/index.ts"
+compatibility_date = "2024-07-25"
+compatibility_flags = ["nodejs_compat"]
+
+[vars]
+MASTER_PASSCODE = "1115"
+CORS_ORIGIN = "https://mediahub-bpx.pages.dev"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "mediahub-db"
+database_id = "54f4fb16-b8d4-4f81-95a8-ad2542d40f3c"
+
+[dev]
+port = 8787

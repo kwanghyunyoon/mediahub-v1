@@ -113,7 +113,7 @@ export default function VideoPlayer({
         transition={{ duration: 0.25, ease: "easeOut" }}
         onContextMenu={(e) => e.preventDefault()}
         style={{ "--p-color": accentColor, "--p-rgb": rgb }}
-        className="fixed inset-0 z-40 bg-[#050507]/97 backdrop-blur-xl flex flex-col"
+        className="fixed inset-0 z-40 bg-[#050507]/97 backdrop-blur-xl flex flex-col safe-area-override"
       >
         {/* Top bar */}
         <header className="flex items-center justify-between gap-4 px-4 md:px-8 py-4 border-b border-white/[0.05]">
