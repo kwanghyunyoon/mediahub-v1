@@ -23,7 +23,7 @@ import { CSS } from "@dnd-kit/utilities";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { getIcon, hexToRgb } from "@/lib/registry";
-import { listMedia, reorderMedia, reorderSections, clearProfilePasscode } from "@/lib/api";
+import { listMedia, reorderMedia, clearProfilePasscode } from "@/lib/api";
 import MediaForm from "@/components/MediaForm";
 import VideoPlayer from "@/components/VideoPlayer";
 import SortableMediaCard from "@/components/SortableMediaCard";
@@ -368,18 +368,13 @@ export default function ProfileShell() {
             <button
               type="button"
               data-testid="sections-reorder-save"
-              onClick={async () => {
-                try {
-                  await reorderSections(profile.id, draftSections);
-                  const next = { ...profile, sections: [...draftSections] };
-                  setProfile(next);
-                  sessionStorage.setItem(`mh_profile_${id}`, JSON.stringify(next));
-                  toast.success("Section order saved");
-                  setReorderingSections(false);
-                  setDraftSections([]);
-                } catch {
-                  toast.error("Save failed");
-                }
+              onClick={() => {
+                const next = { ...profile, sections: [...draftSections] };
+                setProfile(next);
+                sessionStorage.setItem(`mh_profile_${id}`, JSON.stringify(next));
+                toast.success("Section order saved");
+                setReorderingSections(false);
+                setDraftSections([]);
               }}
               style={{ backgroundColor: profile.color }}
               className="h-9 px-4 rounded-full text-sm text-white hover:opacity-90 inline-flex items-center gap-1.5"
