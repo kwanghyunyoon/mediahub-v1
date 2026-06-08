@@ -65,7 +65,6 @@ function VideoCard({ item, idx, last, section, isMobile, onPlay }) {
 
   return (
     <button
-      key={item.id}
       onClick={onPlay}
       onMouseEnter={() => !isMobile && setHovered(true)}
       onMouseLeave={() => !isMobile && setHovered(false)}
@@ -148,13 +147,15 @@ function VideoCard({ item, idx, last, section, isMobile, onPlay }) {
 function HeroCarousel({ sections, isMobile, playAll, playSection, lastWatchedIdx }) {
   const [idx, setIdx] = useState(0);
   const timerRef = useRef(null);
+  const sectionsLenRef = useRef(sections.length);
+  sectionsLenRef.current = sections.length;
   const bg = isMobile ? "#070707" : "#08080F";
   const heroH = isMobile ? "clamp(220px,56vw,340px)" : "clamp(440px,52vh,580px)";
 
   const startAuto = useCallback(() => {
     clearInterval(timerRef.current);
-    timerRef.current = setInterval(() => setIdx((i) => (i + 1) % sections.length), 6000);
-  }, [sections.length]);
+    timerRef.current = setInterval(() => setIdx((i) => (i + 1) % sectionsLenRef.current), 6000);
+  }, []);
 
   useEffect(() => {
     startAuto();

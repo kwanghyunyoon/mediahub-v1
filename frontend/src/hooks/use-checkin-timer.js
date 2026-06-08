@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 export function useCheckinTimer({ profileId, onCheckin }) {
   const [intervalMins, setIntervalMinsState] = useState(() => {
@@ -30,6 +30,8 @@ export function useCheckinTimer({ profileId, onCheckin }) {
     },
     [profileId, scheduleCheckin],
   );
+
+  useEffect(() => () => clearCheckin(), [clearCheckin]);
 
   return { intervalMins, setIntervalMins, scheduleCheckin, clearCheckin };
 }

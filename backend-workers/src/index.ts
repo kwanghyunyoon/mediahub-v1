@@ -102,10 +102,72 @@ function err(status: number, message: string) {
 }
 
 // ---------------------------------------------------------------------------
+// Rate limiter (in-process; resets on cold start, not shared across instances)
+// ---------------------------------------------------------------------------
+
+const RL_MAX = 5;
+const RL_WINDOW_MS = 5 * 60 * 1000;
+
+interface RLEntry { count: number; lockedUntil: number }
+const rlStore: Map<string, RLEntry> =
+  (globalThis as any).__mhRl ?? ((globalThis as any).__mhRl = new Map<string, RLEntry>());
+
+function rlCheck(key: string): Response | null {
+  const now = Date.now();
+  const e = rlStore.get(key);
+  if (e && now < e.lockedUntil) {
+    return err(429, `Too many attempts — try again in ${Math.ceil((e.lockedUntil - now) / 1000)}s`);
+  }
+  return null;
+}
+
+function rlRecord(key: string): void {
+  const e = rlStore.get(key) ?? { count: 0, lockedUntil: 0 };
+  e.count += 1;
+  if (e.count >= RL_MAX) { e.lockedUntil = Date.now() + RL_WINDOW_MS; e.count = 0; }
+  rlStore.set(key, e);
+}
+
+function rlClear(key: string): void {
+  rlStore.delete(key);
+}
+
+// ---------------------------------------------------------------------------
+// Auth helper — profile passcode OR admin master passcode required
+// ---------------------------------------------------------------------------
+
+async function requireProfileOrAdmin(
+  db: D1Database,
+  masterPasscode: string,
+  headers: Headers,
+  profileId: string,
+): Promise<{ ok: true; profile: ProfileRow } | Response> {
+  const adminPass = headers.get("X-Admin-Passcode");
+  if (adminPass !== null && adminPass === masterPasscode) {
+    const profile = await db.prepare("SELECT * FROM profiles WHERE id = ?")
+      .bind(profileId).first<ProfileRow>();
+    if (!profile) return err(404, "Profile not found");
+    return { ok: true, profile };
+  }
+  const profilePass = headers.get("X-Profile-Passcode");
+  if (!profilePass) return err(401, "Authentication required");
+  const profile = await db.prepare("SELECT * FROM profiles WHERE id = ?")
+    .bind(profileId).first<ProfileRow>();
+  if (!profile) return err(404, "Profile not found");
+  if (profilePass !== profile.passcode) return err(401, "Wrong passcode");
+  return { ok: true, profile };
+}
+
+// ---------------------------------------------------------------------------
 // App
 // ---------------------------------------------------------------------------
 
 const app = new Hono<{ Bindings: Env }>();
+
+app.onError((e, c) => {
+  console.error(e);
+  return c.json({ detail: "Internal server error" }, 500);
+});
 
 // CORS — allow the Pages frontend (and any preview deployment hashes) to call the Worker
 app.use("*", async (c, next) => {
@@ -137,10 +199,17 @@ app.get("/api/", (c) => c.json({ message: "MediaHub API", status: "ok" }));
 // ---------------------------------------------------------------------------
 
 app.post("/api/admin/verify", async (c) => {
+  const ip = c.req.raw.headers.get("CF-Connecting-IP") ?? "unknown";
+  const rlKey = `admin:${ip}`;
+  const blocked = rlCheck(rlKey);
+  if (blocked) return blocked;
+
   const body = await c.req.json<{ passcode: string }>();
   if (body.passcode !== c.env.MASTER_PASSCODE) {
+    rlRecord(rlKey);
     return c.json({ detail: "Invalid master passcode" }, 401);
   }
+  rlClear(rlKey);
   return c.json({ ok: true });
 });
 
@@ -161,12 +230,21 @@ app.get("/api/profiles", async (c) => {
 
 app.post("/api/profiles/:id/verify", async (c) => {
   const id = c.req.param("id");
+  const ip = c.req.raw.headers.get("CF-Connecting-IP") ?? "unknown";
+  const rlKey = `profile:${ip}:${id}`;
+  const blocked = rlCheck(rlKey);
+  if (blocked) return blocked;
+
   const body = await c.req.json<{ passcode: string }>();
   const row = await c.env.DB.prepare("SELECT * FROM profiles WHERE id = ?")
     .bind(id)
     .first<ProfileRow>();
   if (!row) return c.json({ detail: "Profile not found" }, 404);
-  if (body.passcode !== row.passcode) return c.json({ detail: "Wrong passcode" }, 401);
+  if (body.passcode !== row.passcode) {
+    rlRecord(rlKey);
+    return c.json({ detail: "Wrong passcode" }, 401);
+  }
+  rlClear(rlKey);
   return c.json(toPublic(row));
 });
 
@@ -332,9 +410,8 @@ app.get("/api/profiles/:id/media", async (c) => {
 
 app.post("/api/profiles/:id/media", async (c) => {
   const profileId = c.req.param("id");
-  const profile = await c.env.DB.prepare("SELECT id FROM profiles WHERE id = ?")
-    .bind(profileId).first();
-  if (!profile) return c.json({ detail: "Profile not found" }, 404);
+  const auth = await requireProfileOrAdmin(c.env.DB, c.env.MASTER_PASSCODE, c.req.raw.headers, profileId);
+  if (auth instanceof Response) return auth;
 
   const body = await c.req.json<{
     title: string; description?: string; sectionLabel: string;
@@ -383,9 +460,8 @@ app.post("/api/profiles/:id/media", async (c) => {
 
 app.post("/api/profiles/:id/media/reorder", async (c) => {
   const profileId = c.req.param("id");
-  const profile = await c.env.DB.prepare("SELECT id FROM profiles WHERE id = ?")
-    .bind(profileId).first();
-  if (!profile) return c.json({ detail: "Profile not found" }, 404);
+  const auth = await requireProfileOrAdmin(c.env.DB, c.env.MASTER_PASSCODE, c.req.raw.headers, profileId);
+  if (auth instanceof Response) return auth;
 
   const body = await c.req.json<{ sectionLabel: string; mediaIds: string[] }>();
   const section = body.sectionLabel.trim();
@@ -415,6 +491,8 @@ app.post("/api/profiles/:id/media/reorder", async (c) => {
 app.put("/api/profiles/:id/media/:mediaId", async (c) => {
   const profileId = c.req.param("id");
   const mediaId = c.req.param("mediaId");
+  const auth = await requireProfileOrAdmin(c.env.DB, c.env.MASTER_PASSCODE, c.req.raw.headers, profileId);
+  if (auth instanceof Response) return auth;
 
   const existing = await c.env.DB.prepare(
     "SELECT * FROM media WHERE id = ? AND profileId = ?"
@@ -466,6 +544,8 @@ app.put("/api/profiles/:id/media/:mediaId", async (c) => {
 app.delete("/api/profiles/:id/media/:mediaId", async (c) => {
   const profileId = c.req.param("id");
   const mediaId = c.req.param("mediaId");
+  const auth = await requireProfileOrAdmin(c.env.DB, c.env.MASTER_PASSCODE, c.req.raw.headers, profileId);
+  if (auth instanceof Response) return auth;
 
   const result = await c.env.DB.prepare(
     "DELETE FROM media WHERE id = ? AND profileId = ?"

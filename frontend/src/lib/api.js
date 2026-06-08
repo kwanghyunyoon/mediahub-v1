@@ -62,9 +62,7 @@ export const adminDeleteProfile = async (id) => {
 
 // --- Media (mutations require X-Profile-Passcode) ---
 export const listMedia = async (profileId) => {
-  const { data } = await api.get(`/profiles/${profileId}/media`, {
-    headers: profileMediaHeaders(profileId),
-  });
+  const { data } = await api.get(`/profiles/${profileId}/media`);
   return data;
 };
 
@@ -93,15 +91,6 @@ export const reorderMedia = async (profileId, sectionLabel, mediaIds) => {
   const { data } = await api.post(
     `/profiles/${profileId}/media/reorder`,
     { sectionLabel, mediaIds },
-    { headers: profileMediaHeaders(profileId) },
-  );
-  return data;
-};
-
-export const reorderSections = async (profileId, sections) => {
-  const { data } = await api.post(
-    `/profiles/${profileId}/sections/reorder`,
-    { sections },
     { headers: profileMediaHeaders(profileId) },
   );
   return data;
