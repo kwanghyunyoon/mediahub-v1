@@ -13,9 +13,16 @@ export default function KidsVideoPlayer({
   checkinOpen,
 }) {
   const [idx, setIdx] = useState(startIdx);
+  const [videoError, setVideoError] = useState(false);
+  const [videoKey, setVideoKey] = useState(0);
   const videoRef = useRef(null);
   const media = playlist[idx];
   const source = media ? parseSource(media) : null;
+
+  // Keep a stable ref to onClose so the keydown effect doesn't re-register
+  // on every render when the parent passes a new arrow function.
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
 
   // Persist last-watched index
   useEffect(() => {
@@ -23,6 +30,12 @@ export default function KidsVideoPlayer({
       localStorage.setItem(`mh_last_${profileId}_${sectionLabel}`, String(idx));
     }
   }, [idx, profileId, sectionLabel]);
+
+  // Reset video error state when switching tracks
+  useEffect(() => {
+    setVideoError(false);
+    setVideoKey((k) => k + 1);
+  }, [idx]);
 
   // Pause/resume when check-in fires
   useEffect(() => {
@@ -34,10 +47,10 @@ export default function KidsVideoPlayer({
 
   // Escape key to close
   useEffect(() => {
-    const onKey = (e) => { if (e.key === "Escape") onClose?.(); };
+    const onKey = (e) => { if (e.key === "Escape") onCloseRef.current?.(); };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  }, []);
 
   // Lock body scroll
   useEffect(() => {
@@ -52,6 +65,12 @@ export default function KidsVideoPlayer({
     else onClose?.();
   };
   const handleEnded = () => goNext();
+
+  const handleVideoError = () => setVideoError(true);
+  const handleRetry = () => {
+    setVideoError(false);
+    setVideoKey((k) => k + 1);
+  };
 
   if (!media || !source) return null;
   const isIframe = source.kind !== "direct";
@@ -116,20 +135,36 @@ export default function KidsVideoPlayer({
                 className="w-full h-full border-0 bg-black"
               />
             ) : (
-              <video
-                ref={videoRef}
-                src={source.src}
-                poster={media.posterUrl || undefined}
-                controls
-                autoPlay
-                playsInline
-                preload="metadata"
-                controlsList="nodownload noremoteplayback noplaybackrate"
-                disablePictureInPicture
-                onEnded={handleEnded}
-                onContextMenu={(e) => e.preventDefault()}
-                className="w-full h-full object-contain bg-black"
-              />
+              <>
+                <video
+                  key={videoKey}
+                  ref={videoRef}
+                  src={source.src}
+                  poster={media.posterUrl || undefined}
+                  controls
+                  autoPlay
+                  playsInline
+                  preload="metadata"
+                  controlsList="nodownload noremoteplayback noplaybackrate"
+                  disablePictureInPicture
+                  onEnded={handleEnded}
+                  onError={handleVideoError}
+                  onContextMenu={(e) => e.preventDefault()}
+                  className="w-full h-full object-contain bg-black"
+                />
+                {videoError && (
+                  <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/90 gap-3">
+                    <p className="text-white/50 text-sm">Failed to load video</p>
+                    <button
+                      type="button"
+                      onClick={handleRetry}
+                      className="text-xs text-white/40 hover:text-white underline transition-colors"
+                    >
+                      Retry
+                    </button>
+                  </div>
+                )}
+              </>
             )}
             {isIframe && (
               <>

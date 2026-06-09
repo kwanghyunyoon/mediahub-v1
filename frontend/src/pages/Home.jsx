@@ -5,7 +5,6 @@ import { Settings, ChevronLeft, ChevronRight } from "lucide-react";
 import { listProfiles, setProfilePasscode } from "@/lib/api";
 import ProfileCard from "@/components/ProfileCard";
 import PasscodeDialog from "@/components/PasscodeDialog";
-import ThemePicker from "@/components/ThemePicker";
 
 const CAROUSEL_THRESHOLD = 5;
 
@@ -204,16 +203,6 @@ export default function Home() {
           </div>
         )}
       </div>
-
-      {/* Theme picker */}
-      <motion.div
-        initial={{ opacity: 0, y: 8 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5, delay: 0.4 }}
-        className="absolute bottom-8 left-1/2 -translate-x-1/2 z-10"
-      >
-        <ThemePicker />
-      </motion.div>
 
       <PasscodeDialog
         profile={selected}
