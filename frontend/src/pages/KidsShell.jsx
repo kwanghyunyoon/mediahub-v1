@@ -10,13 +10,30 @@ import KidsCheckinOverlay from "@/components/KidsCheckinOverlay";
 import { useCheckinTimer } from "@/hooks/use-checkin-timer";
 import { useIsMobile } from "@/hooks/use-is-mobile";
 
+const SECTION_TAB_MAP = {
+  "Cars — Movies": "movies",
+  "Cars — Clips": "clips",
+  "Bluey": "shows",
+  "SuperKitties": "shows",
+  "Pocoyo": "shows",
+  "BeddyByes": "shows",
+  "Rolie Polie Olie": "shows",
+};
+
 const SHOW_CONFIG = {
-  "Cars by Pixar": {
+  "Cars — Movies": {
     icon: "⚡",
     gradient: "linear-gradient(155deg,#5C0000 0%,#A81500 30%,#D43000 60%,#FF5200 85%,#FF7800 100%)",
     tint: "linear-gradient(to top,rgba(7,7,7,0.95) 0%,rgba(7,7,7,0.35) 50%,transparent 100%)",
     accent: "#FF5200",
     glow: "rgba(255,82,0,0.55)",
+  },
+  "Cars — Clips": {
+    icon: "🎬",
+    gradient: "linear-gradient(155deg,#5C2200 0%,#A84000 30%,#D46000 60%,#FF8C00 85%,#FFB300 100%)",
+    tint: "linear-gradient(to top,rgba(7,7,7,0.95) 0%,rgba(7,7,7,0.35) 50%,transparent 100%)",
+    accent: "#FF8C00",
+    glow: "rgba(255,140,0,0.55)",
   },
   Bluey: {
     icon: "💙",
@@ -38,6 +55,20 @@ const SHOW_CONFIG = {
     tint: "linear-gradient(to top,rgba(7,7,7,0.95) 0%,rgba(7,7,7,0.35) 50%,transparent 100%)",
     accent: "#0090E8",
     glow: "rgba(64,184,255,0.55)",
+  },
+  BeddyByes: {
+    icon: "⭐",
+    gradient: "linear-gradient(155deg,#1a0038 0%,#4a0080 40%,#7800c8 70%,#b060ff 100%)",
+    tint: "linear-gradient(to top,rgba(7,7,7,0.95) 0%,rgba(7,7,7,0.35) 50%,transparent 100%)",
+    accent: "#9040e0",
+    glow: "rgba(144,64,224,0.55)",
+  },
+  "Rolie Polie Olie": {
+    icon: "🤖",
+    gradient: "linear-gradient(155deg,#003020 0%,#006040 40%,#00A060 70%,#40D090 100%)",
+    tint: "linear-gradient(to top,rgba(7,7,7,0.95) 0%,rgba(7,7,7,0.35) 50%,transparent 100%)",
+    accent: "#00B870",
+    glow: "rgba(0,184,112,0.55)",
   },
 };
 
@@ -121,9 +152,11 @@ function VideoCard({ item, idx, last, section, isMobile, onPlay }) {
           </div>
         )}
 
-        <div style={{ position: "absolute", top: "0.3rem", left: "0.3rem", background: "rgba(0,0,0,0.7)", backdropFilter: "blur(4px)", borderRadius: "0.22rem", padding: "1px 5px", fontSize: "0.55rem", fontWeight: 800, color: "#fff", letterSpacing: "0.06em", textTransform: "uppercase" }}>
-          Ep {idx + 1}
-        </div>
+        {item.sourceType === "direct" && (
+          <div style={{ position: "absolute", top: "0.3rem", left: "0.3rem", background: "rgba(0,0,0,0.7)", backdropFilter: "blur(4px)", borderRadius: "0.22rem", padding: "1px 5px", fontSize: "0.55rem", fontWeight: 800, color: "#fff", letterSpacing: "0.06em", textTransform: "uppercase" }}>
+            Ep {idx + 1}
+          </div>
+        )}
         {idx === last && (
           <div style={{ position: "absolute", top: "0.3rem", right: "0.3rem", background: accent, borderRadius: "0.22rem", padding: "1px 5px", fontSize: "0.52rem", fontWeight: 800, color: "#fff", letterSpacing: "0.06em", textTransform: "uppercase" }}>
             Last
@@ -150,7 +183,7 @@ function HeroCarousel({ sections, isMobile, playAll, playSection, lastWatchedIdx
   const sectionsLenRef = useRef(sections.length);
   sectionsLenRef.current = sections.length;
   const bg = isMobile ? "#070707" : "#08080F";
-  const heroH = isMobile ? "clamp(220px,56vw,340px)" : "clamp(440px,52vh,580px)";
+  const heroH = isMobile ? "clamp(280px,72vw,420px)" : "clamp(520px,65vh,700px)";
 
   const startAuto = useCallback(() => {
     clearInterval(timerRef.current);
@@ -273,9 +306,50 @@ function HeroCarousel({ sections, isMobile, playAll, playSection, lastWatchedIdx
   );
 }
 
+function SectionTabBar({ sections, isMobile, onSelect }) {
+  const [active, setActive] = useState(null);
+  return (
+    <div style={{
+      display: "flex", gap: "0.5rem", overflowX: "auto",
+      padding: isMobile ? "0.65rem 1rem" : "0.75rem 2rem",
+      scrollbarWidth: "none", msOverflowStyle: "none",
+      borderBottom: "1px solid rgba(255,255,255,0.06)", flexShrink: 0,
+    }}>
+      {sections.map(({ label, config }) => (
+        <button
+          key={label}
+          onClick={() => { setActive(label); onSelect(label); }}
+          style={{
+            flexShrink: 0,
+            padding: "0.35rem 0.9rem",
+            borderRadius: "2rem",
+            fontFamily: "Outfit, sans-serif",
+            fontWeight: 700,
+            fontSize: "0.72rem",
+            letterSpacing: "0.05em",
+            textTransform: "uppercase",
+            color: active === label ? "#fff" : "rgba(255,255,255,0.5)",
+            background: active === label ? config.accent : "rgba(255,255,255,0.07)",
+            border: `1px solid ${active === label ? "transparent" : "rgba(255,255,255,0.1)"}`,
+            cursor: "pointer",
+            transition: "all 0.2s ease",
+          }}
+        >
+          {label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 function StreamingContent({ sections, isMobile, playAll, playSection, lastWatchedIdx }) {
   const bg = isMobile ? "#070707" : "#08080F";
   const rowPadX = isMobile ? "1rem" : "2rem";
+  const sectionRefs = useRef({});
+
+  const scrollToSection = useCallback((label) => {
+    sectionRefs.current[label]?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, []);
 
   return (
     <div className="flex-1 overflow-y-auto" style={{ background: bg, scrollbarWidth: "none" }}>
@@ -289,12 +363,19 @@ function StreamingContent({ sections, isMobile, playAll, playSection, lastWatche
         lastWatchedIdx={lastWatchedIdx}
       />
 
+      {/* ── Section tab bar ── */}
+      <SectionTabBar sections={sections} isMobile={isMobile} onSelect={scrollToSection} />
+
       {/* ── Content rows ── */}
       <div style={{ paddingBottom: isMobile ? "2rem" : "3rem" }}>
         {sections.map((section) => {
           const last = lastWatchedIdx(section.label);
           return (
-            <div key={section.label} style={{ marginTop: isMobile ? "1.75rem" : "2.25rem" }}>
+            <div
+              key={section.label}
+              ref={(el) => { sectionRefs.current[section.label] = el; }}
+              style={{ marginTop: isMobile ? "1.75rem" : "2.25rem" }}
+            >
               <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", padding: `0 ${rowPadX}`, marginBottom: "0.75rem" }}>
                 <span style={{ fontSize: isMobile ? "1rem" : "1.1rem" }}>{section.config.icon}</span>
                 <span style={{ fontFamily: "Outfit,sans-serif", fontWeight: 800, fontSize: isMobile ? "0.82rem" : "1rem", color: "#fff", letterSpacing: "0.06em", textTransform: "uppercase" }}>
@@ -437,25 +518,26 @@ export default function KidsShell() {
         activeTab={tab}
         onTabChange={setTab}
       >
-        {tab !== "home" ? (
-          <ComingSoon label={TABS.find((t) => t.key === tab)?.label || tab} />
-        ) : loading ? (
+        {loading ? (
           <div className="flex-1 flex items-center justify-center text-white/30 text-sm">
             Loading…
           </div>
-        ) : sections.length === 0 ? (
-          <div className="flex-1 flex items-center justify-center text-white/30 text-sm">
-            No videos yet.
-          </div>
-        ) : (
-          <StreamingContent
-            sections={sections}
-            isMobile={isMobile}
-            playAll={playAll}
-            playSection={playSection}
-            lastWatchedIdx={lastWatchedIdx}
-          />
-        )}
+        ) : (() => {
+          const filtered = tab === "home"
+            ? sections
+            : sections.filter((s) => SECTION_TAB_MAP[s.label] === tab);
+          return filtered.length === 0 ? (
+            <ComingSoon label={TABS.find((t) => t.key === tab)?.label || tab} />
+          ) : (
+            <StreamingContent
+              sections={filtered}
+              isMobile={isMobile}
+              playAll={playAll}
+              playSection={playSection}
+              lastWatchedIdx={lastWatchedIdx}
+            />
+          );
+        })()}
       </Layout>
 
       {/* ── Check-in timer picker ── */}

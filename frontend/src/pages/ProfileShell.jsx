@@ -9,7 +9,102 @@ import { listMedia, clearProfilePasscode } from "@/lib/api";
 import VideoPlayer from "@/components/VideoPlayer";
 import { useIsMobile } from "@/hooks/use-is-mobile";
 
-// ── Hero Carousel ────────────────────────────────────────────────────────────
+const SECTION_TAB_MAP = {
+  "Yellowstone":  "shows",
+  "1883":         "shows",
+  "1923":         "shows",
+  "Marshals":     "shows",
+  "Dutton Ranch": "shows",
+  "Madison":      "shows",
+  "Clips & Extras": "clips",
+};
+
+const PROFILE_TABS = [
+  { key: "home",  label: "Home"     },
+  { key: "shows", label: "TV Shows" },
+  { key: "clips", label: "Clips"    },
+];
+
+// ── Top-level category tab bar ────────────────────────────────────────────────
+function ProfileTabNav({ activeTab, onTabChange, accentColor, isWestern, isNeon, isStudio }) {
+  return (
+    <div style={{
+      display: "flex", gap: "0.25rem",
+      padding: "0.55rem 1.25rem",
+      borderBottom: isWestern ? "1px solid #3a2a1c" : isNeon ? "1px solid #2a1845" : isStudio ? "1px solid #2d2419" : "1px solid rgba(255,255,255,0.06)",
+      background: isWestern ? "rgba(26,20,16,0.9)" : isNeon ? "rgba(7,5,26,0.9)" : isStudio ? "rgba(24,18,12,0.9)" : "rgba(5,5,7,0.9)",
+      backdropFilter: "blur(12px)",
+      flexShrink: 0,
+      zIndex: 10,
+    }}>
+      {PROFILE_TABS.map(({ key, label }) => {
+        const active = key === activeTab;
+        return (
+          <button
+            key={key}
+            onClick={() => onTabChange(key)}
+            style={{
+              padding: "0.32rem 0.9rem",
+              borderRadius: "2rem",
+              fontFamily: isWestern || isStudio ? "'Playfair Display', serif" : "Outfit, sans-serif",
+              fontWeight: isWestern || isStudio ? 600 : 700,
+              fontStyle: isStudio ? "italic" : "normal",
+              fontSize: "0.72rem",
+              letterSpacing: isWestern || isStudio ? "0.02em" : "0.06em",
+              textTransform: isWestern || isStudio ? "none" : "uppercase",
+              color: active ? "#fff" : "rgba(255,255,255,0.45)",
+              background: active ? accentColor : "rgba(255,255,255,0.05)",
+              border: `1px solid ${active ? "transparent" : "rgba(255,255,255,0.08)"}`,
+              cursor: "pointer",
+              transition: "all 0.2s ease",
+            }}
+          >
+            {label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+// ── Section Tab Nav ───────────────────────────────────────────────────────────
+function SectionTabBar({ sections, accentColor, isMobile, onSelect }) {
+  const [active, setActive] = useState(null);
+  return (
+    <div style={{
+      display: "flex", gap: "0.5rem", overflowX: "auto",
+      padding: isMobile ? "0.65rem 1rem" : "0.75rem 2rem",
+      scrollbarWidth: "none", msOverflowStyle: "none",
+      borderBottom: "1px solid rgba(255,255,255,0.06)", flexShrink: 0,
+    }}>
+      {sections.map(({ label }) => (
+        <button
+          key={label}
+          onClick={() => { setActive(label); onSelect(label); }}
+          style={{
+            flexShrink: 0,
+            padding: "0.35rem 0.9rem",
+            borderRadius: "2rem",
+            fontFamily: "Outfit, sans-serif",
+            fontWeight: 700,
+            fontSize: "0.72rem",
+            letterSpacing: "0.05em",
+            textTransform: "uppercase",
+            color: active === label ? "#fff" : "rgba(255,255,255,0.5)",
+            background: active === label ? accentColor : "rgba(255,255,255,0.07)",
+            border: `1px solid ${active === label ? "transparent" : "rgba(255,255,255,0.1)"}`,
+            cursor: "pointer",
+            transition: "all 0.2s ease",
+          }}
+        >
+          {label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+// ── Hero Carousel ─────────────────────────────────────────────────────────────
 function ProfileHeroCarousel({ sections, accentColor, rgb, isMobile, onPlay, lastWatchedIdx, isWestern, isNeon, isStudio }) {
   const [idx, setIdx] = useState(0);
   const timerRef = useRef(null);
@@ -23,6 +118,10 @@ function ProfileHeroCarousel({ sections, accentColor, rgb, isMobile, onPlay, las
   }, []);
 
   useEffect(() => { startAuto(); return () => clearInterval(timerRef.current); }, [startAuto]);
+
+  useEffect(() => {
+    if (idx >= sections.length) setIdx(0);
+  }, [sections.length, idx]);
 
   const go = (dir) => {
     setIdx((i) => (i + dir + sections.length) % sections.length);
@@ -150,12 +249,13 @@ function ProfileHeroCarousel({ sections, accentColor, rgb, isMobile, onPlay, las
   );
 }
 
-// ── Media card for horizontal rows ───────────────────────────────────────────
+// ── Media Card ────────────────────────────────────────────────────────────────
 function ProfileMediaCard({ item, itemIdx, lastIdx, accentColor, isMobile, onClick }) {
   const [hovered, setHovered] = useState(false);
   const cw = isMobile ? 150 : 220;
   const ch = isMobile ? 84 : 124;
   const isLast = itemIdx === lastIdx;
+  const isEpisode = item.sourceType === "direct";
 
   return (
     <button
@@ -178,22 +278,30 @@ function ProfileMediaCard({ item, itemIdx, lastIdx, accentColor, isMobile, onCli
           </div>
         )}
 
-        <div style={{ position: "absolute", top: "0.3rem", left: "0.3rem", background: "rgba(0,0,0,0.7)", backdropFilter: "blur(4px)", borderRadius: "0.22rem", padding: "1px 5px", fontSize: "0.52rem", fontWeight: 800, color: "#fff", letterSpacing: "0.06em", textTransform: "uppercase" }}>
-          Ep {itemIdx + 1}
-        </div>
+        {isEpisode && (
+          <div style={{ position: "absolute", top: "0.3rem", left: "0.3rem", background: "rgba(0,0,0,0.7)", backdropFilter: "blur(4px)", borderRadius: "0.22rem", padding: "1px 5px", fontSize: "0.52rem", fontWeight: 800, color: "#fff", letterSpacing: "0.06em", textTransform: "uppercase" }}>
+            Ep {itemIdx + 1}
+          </div>
+        )}
         {isLast && (
           <div style={{ position: "absolute", top: "0.3rem", right: "0.3rem", background: accentColor, borderRadius: "0.22rem", padding: "1px 5px", fontSize: "0.5rem", fontWeight: 800, color: "#fff", letterSpacing: "0.06em", textTransform: "uppercase" }}>Last</div>
         )}
         <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: "40%", background: "linear-gradient(to top, rgba(0,0,0,0.55) 0%, transparent 100%)" }} />
       </div>
+
       <p style={{ fontFamily: "Outfit, Manrope, sans-serif", fontSize: isMobile ? "0.68rem" : "0.74rem", fontWeight: 600, color: "rgba(255,255,255,0.82)", marginTop: "0.4rem", lineHeight: 1.3, overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}>
         {item.title}
       </p>
+      {item.description && (
+        <p style={{ fontFamily: "Outfit, sans-serif", fontSize: isMobile ? "0.6rem" : "0.64rem", fontWeight: 500, color: "rgba(255,255,255,0.38)", marginTop: "0.2rem", lineHeight: 1.35, overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}>
+          {item.description}
+        </p>
+      )}
     </button>
   );
 }
 
-// ── Main component ───────────────────────────────────────────────────────────
+// ── Main component ────────────────────────────────────────────────────────────
 export default function ProfileShell() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -203,6 +311,9 @@ export default function ProfileShell() {
   const [media, setMedia] = useState([]);
   const [loadingMedia, setLoadingMedia] = useState(true);
   const [playing, setPlaying] = useState(null);
+  const [tab, setTab] = useState("home");
+
+  const sectionRefs = useRef({});
 
   useEffect(() => {
     const raw = sessionStorage.getItem(`mh_profile_${id}`);
@@ -220,8 +331,6 @@ export default function ProfileShell() {
 
   const rgb = useMemo(() => (profile ? hexToRgb(profile.color) : "255,255,255"), [profile]);
 
-  // Reject any backgroundUrl that doesn't start with http(s) — guards against
-  // CSS injection via a tampered sessionStorage value.
   const safeBgUrl = useMemo(() => {
     const u = profile?.backgroundUrl;
     return u && /^https?:\/\//i.test(u) ? u : null;
@@ -260,6 +369,10 @@ export default function ProfileShell() {
     localStorage.setItem(`mh_last_${id}_${sectionLabel}`, String(itemIdx));
     setPlaying(item);
   }, [grouped, id]);
+
+  const scrollToSection = useCallback((label) => {
+    sectionRefs.current[label]?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, []);
 
   if (!profile) return null;
 
@@ -335,19 +448,37 @@ export default function ProfileShell() {
         </Button>
       </header>
 
+      {/* ── Category tab nav ── */}
+      <ProfileTabNav
+        activeTab={tab}
+        onTabChange={(t) => { setTab(t); }}
+        accentColor={profile.color}
+        isWestern={isWestern}
+        isNeon={isNeon}
+        isStudio={isStudio}
+      />
+
       {/* ── Main content ── */}
       <main className="flex-1 flex flex-col overflow-hidden">
-        {profile.sections.length === 0 || sectionsWithContent.length === 0 ? (
-          <div className="flex-1 flex flex-col items-center justify-center gap-2 px-6 text-center">
-            <p className="text-white/40 text-sm">No content available yet.</p>
-          </div>
-        ) : loadingMedia ? (
+        {loadingMedia ? (
           <p data-testid="profile-media-loading" className="text-center text-white/30 text-sm mt-16">Loading…</p>
-        ) : (
+        ) : (() => {
+          const visibleGroups = tab === "home"
+            ? grouped
+            : grouped.filter((g) => SECTION_TAB_MAP[g.label] === tab);
+          const visibleWithContent = visibleGroups.filter((g) => g.items.length > 0);
+
+          if (visibleWithContent.length === 0) return (
+            <div className="flex-1 flex flex-col items-center justify-center gap-2 px-6 text-center">
+              <p className="text-white/40 text-sm">No content available yet.</p>
+            </div>
+          );
+
+          return (
           <div className="flex-1 overflow-y-auto" style={{ scrollbarWidth: "none" }}>
             {/* Hero Carousel */}
             <ProfileHeroCarousel
-              sections={sectionsWithContent}
+              sections={visibleWithContent}
               accentColor={profile.color}
               rgb={rgb}
               isMobile={isMobile}
@@ -358,13 +489,28 @@ export default function ProfileShell() {
               isStudio={isStudio}
             />
 
+            {/* Section Tab Nav */}
+            <SectionTabBar
+              sections={visibleGroups}
+              accentColor={profile.color}
+              isMobile={isMobile}
+              onSelect={scrollToSection}
+            />
+
             {/* Content rows */}
             <div style={{ paddingBottom: "3rem" }}>
-              {grouped.map((group) => {
+              {visibleGroups.map((group) => {
                 const last = lastWatchedIdx(group.label);
+                const hasDirectVideo = group.items.some((m) => m.sourceType === "direct");
                 return (
-                  <div key={group.label} data-testid={`media-section-${group.label}`} style={{ marginTop: isMobile ? "1.75rem" : "2.25rem" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", padding: `0 ${rowPadX}`, marginBottom: "0.75rem" }}>
+                  <div
+                    key={group.label}
+                    ref={(el) => { sectionRefs.current[group.label] = el; }}
+                    data-testid={`media-section-${group.label}`}
+                    style={{ marginTop: isMobile ? "1.75rem" : "2.25rem" }}
+                  >
+                    {/* Section header */}
+                    <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", padding: `0 ${rowPadX}`, marginBottom: "0.75rem", flexWrap: "wrap" }}>
                       <span style={{
                         fontFamily: isWestern ? "'Playfair Display', serif" : isStudio ? "'DM Serif Display', serif" : "Outfit, sans-serif",
                         fontWeight: isWestern || isStudio ? 700 : 800,
@@ -380,11 +526,33 @@ export default function ProfileShell() {
                       <span style={{ marginLeft: "0.25rem", fontSize: "0.65rem", color: "rgba(255,255,255,0.28)", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase" }}>
                         {group.items.length}
                       </span>
+                      {/* "Full episodes coming soon" chip — shown when section only has trailers */}
+                      {!hasDirectVideo && group.items.length > 0 && (
+                        <span style={{
+                          fontSize: "0.55rem", fontWeight: 800, letterSpacing: "0.1em", textTransform: "uppercase",
+                          color: profile.color,
+                          background: `rgba(${rgb},0.12)`,
+                          border: `1px solid rgba(${rgb},0.3)`,
+                          borderRadius: "2rem", padding: "0.15rem 0.55rem",
+                        }}>
+                          Full Episodes Coming Soon
+                        </span>
+                      )}
                     </div>
 
                     {group.items.length === 0 ? (
-                      <div data-testid={`media-empty-${group.label}`} style={{ padding: `0 ${rowPadX}` }}>
-                        <p className="text-sm text-white/20 italic">Nothing here yet.</p>
+                      <div style={{ padding: `0 ${rowPadX}` }}>
+                        <div style={{
+                          display: "inline-flex", alignItems: "center", gap: "0.5rem",
+                          background: "rgba(255,255,255,0.04)",
+                          border: "1px solid rgba(255,255,255,0.08)",
+                          borderRadius: "0.6rem", padding: "0.7rem 1rem",
+                        }}>
+                          <span style={{ fontSize: "0.95rem" }}>🎬</span>
+                          <p style={{ fontSize: "0.78rem", color: "rgba(255,255,255,0.38)", fontFamily: "Outfit, sans-serif", fontWeight: 500, fontStyle: "italic" }}>
+                            Being uploaded soon — check back shortly.
+                          </p>
+                        </div>
                       </div>
                     ) : (
                       <div style={{ display: "flex", gap: isMobile ? "0.55rem" : "0.75rem", overflowX: "auto", padding: `0.1rem ${rowPadX} 0.75rem`, scrollbarWidth: "none", msOverflowStyle: "none" }}>
@@ -406,7 +574,8 @@ export default function ProfileShell() {
               })}
             </div>
           </div>
-        )}
+          );
+        })()}
       </main>
 
       {/* ── Video player (watch-only, no edit/delete) ── */}
