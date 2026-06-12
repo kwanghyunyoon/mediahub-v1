@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
 import { Search as SearchIcon, Bookmark, X as XIcon } from "lucide-react";
 import { listMedia, clearProfilePasscode } from "@/lib/api";
+import { getMyList, toggleMyList as toggleMyListStorage } from "@/lib/mylist";
 import KidsLayout, { DEFAULT_TABS } from "@/layouts/KidsLayout";
 import KidsDesktopLayout from "@/layouts/KidsDesktopLayout";
 import KidsVideoPlayer from "@/components/KidsVideoPlayer";
@@ -89,7 +90,7 @@ const CHECKIN_OPTIONS = [0, 10, 20, 30];
 
 const TABS = DEFAULT_TABS;
 
-function VideoCard({ item, idx, last, section, isMobile, onPlay }) {
+function VideoCard({ item, idx, last, section, isMobile, inList, onToggle, onPlay }) {
   const [hovered, setHovered] = useState(false);
   const cw = isMobile ? 136 : 220;
   const ch = isMobile ? 77 : 124;
@@ -164,6 +165,30 @@ function VideoCard({ item, idx, last, section, isMobile, onPlay }) {
           </div>
         )}
         <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: "40%", background: "linear-gradient(to top, rgba(0,0,0,0.55) 0%, transparent 100%)" }} />
+
+        {/* Bookmark toggle */}
+        {onToggle && (
+          <div
+            role="button"
+            tabIndex={-1}
+            onClick={(e) => { e.stopPropagation(); onToggle(item.id); }}
+            style={{
+              position: "absolute", bottom: "0.32rem", right: "0.32rem", zIndex: 4,
+              width: 24, height: 24, borderRadius: "50%",
+              background: "rgba(0,0,0,0.72)", backdropFilter: "blur(4px)",
+              border: `1px solid ${inList ? accent : "rgba(255,255,255,0.18)"}`,
+              display: "flex", alignItems: "center", justifyContent: "center",
+              cursor: "pointer", transition: "border-color 0.15s ease",
+            }}
+          >
+            <Bookmark
+              size={11}
+              fill={inList ? accent : "none"}
+              color={inList ? accent : "rgba(255,255,255,0.7)"}
+              strokeWidth={2}
+            />
+          </div>
+        )}
       </div>
 
       <p style={{ fontFamily: "Nunito, Arial, sans-serif", fontSize: isMobile ? "0.68rem" : "0.75rem", fontWeight: 700, color: "rgba(255,255,255,0.82)", marginTop: "0.4rem", lineHeight: 1.3, overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}>
@@ -395,6 +420,8 @@ function StreamingContent({ sections, isMobile, playAll, playSection, lastWatche
                     last={last}
                     section={section}
                     isMobile={isMobile}
+                    inList={myList.includes(item.id)}
+                    onToggle={handleToggleMyList}
                     onPlay={() => playSection(section.label, i)}
                   />
                 ))}
@@ -466,7 +493,7 @@ function KidsHomeFilterPills({ activeFilter, onFilterChange, isMobile }) {
   );
 }
 
-function KidsSearchView({ media, sections, isMobile, onPlay }) {
+function KidsSearchView({ media, sections, isMobile, onPlay, myList, onToggle }) {
   const [query, setQuery] = useState("");
   const q = query.trim().toLowerCase();
   const results = q.length >= 1
@@ -541,6 +568,8 @@ function KidsSearchView({ media, sections, isMobile, onPlay }) {
                     last={-1}
                     section={section}
                     isMobile={isMobile}
+                    inList={myList?.includes(item.id)}
+                    onToggle={onToggle}
                     onPlay={() => onPlay(item)}
                   />
                 );
@@ -553,14 +582,45 @@ function KidsSearchView({ media, sections, isMobile, onPlay }) {
   );
 }
 
-function KidsMyListView({ isMobile }) {
+function KidsMyListView({ media, myList, sections, isMobile, onPlay, onToggle }) {
+  const items = media.filter((m) => myList.includes(m.id));
+  const px = isMobile ? "1rem" : "2rem";
+
+  if (items.length === 0) {
+    return (
+      <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "0.85rem", background: "#070707", padding: "2rem", paddingBottom: "6rem" }}>
+        <span style={{ fontSize: "3.5rem", opacity: 0.35 }}>⭐</span>
+        <p style={{ color: "#fff", fontFamily: "Nunito, sans-serif", fontWeight: 800, fontSize: "1rem" }}>My List</p>
+        <p style={{ color: "rgba(255,255,255,0.3)", fontFamily: "Nunito, sans-serif", fontWeight: 600, fontSize: "0.82rem", textAlign: "center", maxWidth: 240, lineHeight: 1.5 }}>
+          Tap the ⭐ on any video to save it here!
+        </p>
+      </div>
+    );
+  }
+
   return (
-    <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "0.85rem", background: "#070707", padding: "2rem", paddingBottom: "6rem" }}>
-      <span style={{ fontSize: "3.5rem", opacity: 0.35 }}>⭐</span>
-      <p style={{ color: "#fff", fontFamily: "Nunito, sans-serif", fontWeight: 800, fontSize: "1rem" }}>My List</p>
-      <p style={{ color: "rgba(255,255,255,0.3)", fontFamily: "Nunito, sans-serif", fontWeight: 600, fontSize: "0.82rem", textAlign: "center", maxWidth: 240, lineHeight: 1.5 }}>
-        Save your favorite shows and come back to them here — coming soon!
+    <div style={{ flex: 1, overflowY: "auto", background: "#070707", scrollbarWidth: "none", padding: `1.25rem ${px} 0` }}>
+      <p style={{ fontSize: "0.65rem", color: "rgba(255,255,255,0.28)", marginBottom: "1rem", letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 800, fontFamily: "Outfit, sans-serif" }}>
+        {items.length} saved
       </p>
+      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "repeat(2, 1fr)" : "repeat(4, 1fr)", gap: isMobile ? "0.65rem" : "0.8rem", paddingBottom: "6rem" }}>
+        {items.map((item) => {
+          const section = sections.find((s) => s.label === item.sectionLabel) || { config: FALLBACK_CONFIG };
+          return (
+            <VideoCard
+              key={item.id}
+              item={item}
+              idx={0}
+              last={-1}
+              section={section}
+              isMobile={isMobile}
+              inList={true}
+              onToggle={onToggle}
+              onPlay={() => onPlay(item)}
+            />
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -612,6 +672,7 @@ export default function KidsShell() {
 
   const [tab, setTab] = useState("home");
   const [homeFilter, setHomeFilter] = useState("all");
+  const [myList, setMyList] = useState(() => getMyList(id));
   const [playerState, setPlayerState] = useState(null);
   const [checkinOpen, setCheckinOpen] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -687,6 +748,10 @@ export default function KidsShell() {
     playSection(label, startIdx);
   };
 
+  const handleToggleMyList = (itemId) => {
+    setMyList((prev) => toggleMyListStorage(id, itemId, prev));
+  };
+
   const playDirect = (item) => {
     const section = sections.find((s) => s.label === item.sectionLabel);
     const startIdx = section ? section.items.findIndex((m) => m.id === item.id) : 0;
@@ -726,9 +791,18 @@ export default function KidsShell() {
             sections={sections}
             isMobile={isMobile}
             onPlay={playDirect}
+            myList={myList}
+            onToggle={handleToggleMyList}
           />
         ) : tab === "list" ? (
-          <KidsMyListView isMobile={isMobile} />
+          <KidsMyListView
+            media={media}
+            myList={myList}
+            sections={sections}
+            isMobile={isMobile}
+            onPlay={playDirect}
+            onToggle={handleToggleMyList}
+          />
         ) : tab === "settings" ? (
           <KidsSettingsView
             profile={profile}

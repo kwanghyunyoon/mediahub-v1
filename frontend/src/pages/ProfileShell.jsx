@@ -6,6 +6,7 @@ import { useInactivityTimer } from "@/hooks/use-inactivity-timer";
 import { Button } from "@/components/ui/button";
 import { getIcon, hexToRgb } from "@/lib/registry";
 import { listMedia, clearProfilePasscode } from "@/lib/api";
+import { getMyList, toggleMyList as toggleMyListStorage } from "@/lib/mylist";
 import VideoPlayer from "@/components/VideoPlayer";
 import { useIsMobile } from "@/hooks/use-is-mobile";
 
@@ -294,7 +295,7 @@ function ProfileHeroCarousel({ sections, accentColor, rgb, isMobile, onPlay, las
 }
 
 // ── Media Card ────────────────────────────────────────────────────────────────
-function ProfileMediaCard({ item, itemIdx, lastIdx, accentColor, isMobile, onClick }) {
+function ProfileMediaCard({ item, itemIdx, lastIdx, accentColor, isMobile, inList, onToggle, onClick }) {
   const [hovered, setHovered] = useState(false);
   const cw = isMobile ? 150 : 220;
   const ch = isMobile ? 84 : 124;
@@ -331,6 +332,30 @@ function ProfileMediaCard({ item, itemIdx, lastIdx, accentColor, isMobile, onCli
           <div style={{ position: "absolute", top: "0.3rem", right: "0.3rem", background: accentColor, borderRadius: "0.22rem", padding: "1px 5px", fontSize: "0.5rem", fontWeight: 800, color: "#fff", letterSpacing: "0.06em", textTransform: "uppercase" }}>Last</div>
         )}
         <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: "40%", background: "linear-gradient(to top, rgba(0,0,0,0.55) 0%, transparent 100%)" }} />
+
+        {/* Bookmark toggle */}
+        {onToggle && (
+          <div
+            role="button"
+            tabIndex={-1}
+            onClick={(e) => { e.stopPropagation(); onToggle(item.id); }}
+            style={{
+              position: "absolute", bottom: "0.32rem", right: "0.32rem", zIndex: 4,
+              width: 24, height: 24, borderRadius: "50%",
+              background: "rgba(0,0,0,0.72)", backdropFilter: "blur(4px)",
+              border: `1px solid ${inList ? accentColor : "rgba(255,255,255,0.18)"}`,
+              display: "flex", alignItems: "center", justifyContent: "center",
+              cursor: "pointer", transition: "border-color 0.15s ease",
+            }}
+          >
+            <Bookmark
+              size={11}
+              fill={inList ? accentColor : "none"}
+              color={inList ? accentColor : "rgba(255,255,255,0.7)"}
+              strokeWidth={2}
+            />
+          </div>
+        )}
       </div>
 
       <p style={{ fontFamily: "Outfit, Manrope, sans-serif", fontSize: isMobile ? "0.68rem" : "0.74rem", fontWeight: 600, color: "rgba(255,255,255,0.82)", marginTop: "0.4rem", lineHeight: 1.3, overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}>
@@ -346,7 +371,7 @@ function ProfileMediaCard({ item, itemIdx, lastIdx, accentColor, isMobile, onCli
 }
 
 // ── Search view ───────────────────────────────────────────────────────────────
-function SearchView({ media, accentColor, rgb, isMobile, isWestern, isNeon, isStudio, onPlay }) {
+function SearchView({ media, accentColor, rgb, isMobile, isWestern, isNeon, isStudio, onPlay, myList, onToggle }) {
   const [query, setQuery] = useState("");
   const q = query.trim().toLowerCase();
   const results = q.length >= 1
@@ -412,6 +437,8 @@ function SearchView({ media, accentColor, rgb, isMobile, isWestern, isNeon, isSt
                 lastIdx={-1}
                 accentColor={accentColor}
                 isMobile={isMobile}
+                inList={myList?.includes(item.id)}
+                onToggle={onToggle}
                 onClick={() => onPlay(item)}
               />
             ))}
@@ -422,17 +449,45 @@ function SearchView({ media, accentColor, rgb, isMobile, isWestern, isNeon, isSt
   );
 }
 
-// ── My List placeholder ───────────────────────────────────────────────────────
-function MyListView({ accentColor, rgb, isMobile }) {
-  return (
-    <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "0.75rem", padding: "2rem", paddingBottom: "5rem" }}>
-      <div style={{ width: 60, height: 60, borderRadius: "50%", background: `rgba(${rgb},0.12)`, border: `1px solid rgba(${rgb},0.25)`, display: "flex", alignItems: "center", justifyContent: "center" }}>
-        <Bookmark size={26} style={{ color: accentColor }} strokeWidth={1.5} />
+// ── My List view ─────────────────────────────────────────────────────────────
+function MyListView({ media, myList, accentColor, rgb, isMobile, isWestern, isNeon, isStudio, onPlay, onToggle }) {
+  const items = media.filter((m) => myList.includes(m.id));
+  const px = isMobile ? "1rem" : "2rem";
+
+  if (items.length === 0) {
+    return (
+      <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "0.75rem", padding: "2rem", paddingBottom: "5rem" }}>
+        <div style={{ width: 60, height: 60, borderRadius: "50%", background: `rgba(${rgb},0.12)`, border: `1px solid rgba(${rgb},0.25)`, display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <Bookmark size={26} style={{ color: accentColor }} strokeWidth={1.5} />
+        </div>
+        <p style={{ color: "#fff", fontFamily: "Outfit, sans-serif", fontWeight: 600, fontSize: "1rem", marginTop: "0.25rem" }}>My List</p>
+        <p style={{ color: "rgba(255,255,255,0.35)", fontFamily: "Outfit, sans-serif", fontSize: "0.82rem", textAlign: "center", maxWidth: 260, lineHeight: 1.5 }}>
+          Tap the bookmark icon on any card to save it here.
+        </p>
       </div>
-      <p style={{ color: "#fff", fontFamily: "Outfit, sans-serif", fontWeight: 600, fontSize: "1rem", marginTop: "0.25rem" }}>My List</p>
-      <p style={{ color: "rgba(255,255,255,0.35)", fontFamily: "Outfit, sans-serif", fontSize: "0.82rem", textAlign: "center", maxWidth: 260, lineHeight: 1.5 }}>
-        Bookmarking is coming soon — save your favorite episodes and clips here.
+    );
+  }
+
+  return (
+    <div style={{ flex: 1, overflowY: "auto", scrollbarWidth: "none", padding: `1.25rem ${px} 0` }}>
+      <p style={{ fontSize: "0.65rem", color: "rgba(255,255,255,0.28)", marginBottom: "1rem", letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 600, fontFamily: "Outfit, sans-serif" }}>
+        {items.length} saved
       </p>
+      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "repeat(2, 1fr)" : "repeat(4, 1fr)", gap: isMobile ? "0.65rem" : "0.8rem", paddingBottom: "5.5rem" }}>
+        {items.map((item) => (
+          <ProfileMediaCard
+            key={item.id}
+            item={item}
+            itemIdx={0}
+            lastIdx={-1}
+            accentColor={accentColor}
+            isMobile={isMobile}
+            inList={true}
+            onToggle={onToggle}
+            onClick={() => onPlay(item)}
+          />
+        ))}
+      </div>
     </div>
   );
 }
@@ -488,6 +543,7 @@ export default function ProfileShell() {
   const [playing, setPlaying] = useState(null);
   const [tab, setTab] = useState("home");
   const [homeFilter, setHomeFilter] = useState("all");
+  const [myList, setMyList] = useState(() => getMyList(id));
 
   const sectionRefs = useRef({});
 
@@ -545,6 +601,10 @@ export default function ProfileShell() {
     localStorage.setItem(`mh_last_${id}_${sectionLabel}`, String(itemIdx));
     setPlaying(item);
   }, [grouped, id]);
+
+  const handleToggleMyList = useCallback((itemId) => {
+    setMyList((prev) => toggleMyListStorage(id, itemId, prev));
+  }, [id]);
 
   const playDirect = useCallback((item) => {
     const section = grouped.find((g) => g.label === item.sectionLabel);
@@ -657,9 +717,22 @@ export default function ProfileShell() {
             isNeon={isNeon}
             isStudio={isStudio}
             onPlay={playDirect}
+            myList={myList}
+            onToggle={handleToggleMyList}
           />
         ) : tab === "list" ? (
-          <MyListView accentColor={profile.color} rgb={rgb} isMobile={isMobile} />
+          <MyListView
+            media={media}
+            myList={myList}
+            accentColor={profile.color}
+            rgb={rgb}
+            isMobile={isMobile}
+            isWestern={isWestern}
+            isNeon={isNeon}
+            isStudio={isStudio}
+            onPlay={playDirect}
+            onToggle={handleToggleMyList}
+          />
         ) : tab === "settings" ? (
           <SettingsView profile={profile} accentColor={profile.color} rgb={rgb} onExit={exit} isMobile={isMobile} />
         ) : loadingMedia ? (
@@ -765,6 +838,8 @@ export default function ProfileShell() {
                             lastIdx={last}
                             accentColor={profile.color}
                             isMobile={isMobile}
+                            inList={myList.includes(item.id)}
+                            onToggle={handleToggleMyList}
                             onClick={() => playItem(group.label, itemIdx)}
                           />
                         ))}
