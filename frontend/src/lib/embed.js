@@ -39,20 +39,22 @@ export function parseSource(media) {
   return { kind: "embed", src: url };
 }
 
+const YT_ID_RE = /^[a-zA-Z0-9_-]{6,16}$/;
+
 function extractYouTubeId(url) {
   try {
     const u = new URL(url);
+    const validate = (id) => (id && YT_ID_RE.test(id) ? id : null);
     if (u.hostname === "youtu.be") {
-      const id = u.pathname.slice(1).split("/")[0];
-      return /^[a-zA-Z0-9_-]{6,}$/.test(id) ? id : null;
+      return validate(u.pathname.slice(1).split("/")[0]);
     }
     if (
       u.hostname.endsWith("youtube.com") ||
       u.hostname.endsWith("youtube-nocookie.com")
     ) {
-      if (u.pathname === "/watch") return u.searchParams.get("v");
+      if (u.pathname === "/watch") return validate(u.searchParams.get("v"));
       const parts = u.pathname.split("/").filter(Boolean);
-      if (["embed", "shorts", "v"].includes(parts[0])) return parts[1] || null;
+      if (["embed", "shorts", "v"].includes(parts[0])) return validate(parts[1]);
     }
   } catch {
     return null;

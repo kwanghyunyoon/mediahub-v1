@@ -172,14 +172,22 @@ async function requireProfileOrAdmin(
   ip: string,
 ): Promise<{ ok: true; profile: ProfileRow } | Response> {
   const adminPass = headers.get("X-Admin-Passcode");
-  if (adminPass !== null && adminPass === masterPasscode) {
-    const profile = await db.prepare("SELECT * FROM profiles WHERE id = ?")
-      .bind(profileId).first<ProfileRow>();
-    if (!profile) return err(404, "Profile not found");
-    return { ok: true, profile };
+  if (adminPass !== null) {
+    // Bug fix: rate-limit master passcode attempts on this path too
+    const adminRlKey = `admin:${ip}`;
+    const adminBlocked = rlCheck(adminRlKey);
+    if (adminBlocked) return adminBlocked;
+    if (adminPass === masterPasscode) {
+      rlClear(adminRlKey);
+      const profile = await db.prepare("SELECT * FROM profiles WHERE id = ?")
+        .bind(profileId).first<ProfileRow>();
+      if (!profile) return err(404, "Profile not found");
+      return { ok: true, profile };
+    }
+    rlRecord(adminRlKey);
   }
 
-  // Bug fix: rate-limit profile passcode guessing on all mutation routes
+  // Rate-limit profile passcode guessing on all mutation routes
   const rlKey = `profile:${ip}:${profileId}`;
   const blocked = rlCheck(rlKey);
   if (blocked) return blocked;
@@ -331,7 +339,9 @@ app.post("/api/admin/profiles", async (c) => {
   }
 
   const sections = (body.sections ?? [])
-    .map((s) => s.trim()).filter(Boolean).slice(0, 20);
+    .map((s) => s.trim()).filter(Boolean)
+    .filter((s) => s.length <= MAX_SECTION_LABEL)
+    .slice(0, 20);
 
   const now = nowIso();
   const id = randomId();
@@ -398,7 +408,8 @@ app.put("/api/admin/profiles/:id", async (c) => {
   if (body.icon !== undefined)    { fields.push("icon = ?");     values.push(body.icon.trim()); }
   if (body.theme !== undefined)   { fields.push("theme = ?");    values.push(body.theme); }
   if (body.sections !== undefined){
-    const cleaned = body.sections.map((s) => s.trim()).filter(Boolean).slice(0, 20);
+    const cleaned = body.sections.map((s) => s.trim()).filter(Boolean)
+      .filter((s) => s.length <= MAX_SECTION_LABEL).slice(0, 20);
     fields.push("sections = ?"); values.push(JSON.stringify(cleaned));
   }
   if ("backgroundUrl" in body) {
