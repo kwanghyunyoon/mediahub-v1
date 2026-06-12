@@ -169,6 +169,7 @@ async function requireProfileOrAdmin(
   masterPasscode: string,
   headers: Headers,
   profileId: string,
+  ip: string,
 ): Promise<{ ok: true; profile: ProfileRow } | Response> {
   const adminPass = headers.get("X-Admin-Passcode");
   if (adminPass !== null && adminPass === masterPasscode) {
@@ -177,12 +178,22 @@ async function requireProfileOrAdmin(
     if (!profile) return err(404, "Profile not found");
     return { ok: true, profile };
   }
+
+  // Bug fix: rate-limit profile passcode guessing on all mutation routes
+  const rlKey = `profile:${ip}:${profileId}`;
+  const blocked = rlCheck(rlKey);
+  if (blocked) return blocked;
+
   const profilePass = headers.get("X-Profile-Passcode");
   if (!profilePass) return err(401, "Authentication required");
   const profile = await db.prepare("SELECT * FROM profiles WHERE id = ?")
     .bind(profileId).first<ProfileRow>();
   if (!profile) return err(404, "Profile not found");
-  if (profilePass !== profile.passcode) return err(401, "Wrong passcode");
+  if (profilePass !== profile.passcode) {
+    rlRecord(rlKey);
+    return err(401, "Wrong passcode");
+  }
+  rlClear(rlKey);
   return { ok: true, profile };
 }
 
@@ -199,7 +210,7 @@ app.onError((e, c) => {
 
 // CORS — allow the Pages frontend (and any preview deployment hashes) to call the Worker
 app.use("*", async (c, next) => {
-  const base = c.env.CORS_ORIGIN || "*";
+  const base = c.env.CORS_ORIGIN || "";   // Bug fix: never fall back to wildcard "*"
   const originFn = base === "*" ? "*" : (incoming: string) => {
     // Allow exact match or any *.subdomain of the base Pages domain
     const baseDomain = base.replace(/^https?:\/\//, "");
@@ -232,8 +243,9 @@ app.post("/api/admin/verify", async (c) => {
   const blocked = rlCheck(rlKey);
   if (blocked) return blocked;
 
-  const body = await c.req.json<{ passcode: string }>();
-  if (body.passcode !== c.env.MASTER_PASSCODE) {
+  let body: { passcode?: unknown };
+  try { body = await c.req.json(); } catch { return err(400, "Invalid JSON body"); }
+  if (typeof body.passcode !== "string" || body.passcode !== c.env.MASTER_PASSCODE) {
     rlRecord(rlKey);
     return c.json({ detail: "Invalid master passcode" }, 401);
   }
@@ -263,12 +275,13 @@ app.post("/api/profiles/:id/verify", async (c) => {
   const blocked = rlCheck(rlKey);
   if (blocked) return blocked;
 
-  const body = await c.req.json<{ passcode: string }>();
+  let body: { passcode?: unknown };
+  try { body = await c.req.json(); } catch { return err(400, "Invalid JSON body"); }
   const row = await c.env.DB.prepare("SELECT * FROM profiles WHERE id = ?")
     .bind(id)
     .first<ProfileRow>();
   if (!row) return c.json({ detail: "Profile not found" }, 404);
-  if (body.passcode !== row.passcode) {
+  if (typeof body.passcode !== "string" || body.passcode !== row.passcode) {
     rlRecord(rlKey);
     return c.json({ detail: "Wrong passcode" }, 401);
   }
@@ -448,7 +461,8 @@ app.get("/api/profiles/:id/media", async (c) => {
 
 app.post("/api/profiles/:id/media", async (c) => {
   const profileId = c.req.param("id");
-  const auth = await requireProfileOrAdmin(c.env.DB, c.env.MASTER_PASSCODE, c.req.raw.headers, profileId);
+  const ip = c.req.raw.headers.get("CF-Connecting-IP") ?? "unknown";
+  const auth = await requireProfileOrAdmin(c.env.DB, c.env.MASTER_PASSCODE, c.req.raw.headers, profileId, ip);
   if (auth instanceof Response) return auth;
 
   const body = await c.req.json<{
@@ -503,7 +517,8 @@ app.post("/api/profiles/:id/media", async (c) => {
 
 app.post("/api/profiles/:id/media/reorder", async (c) => {
   const profileId = c.req.param("id");
-  const auth = await requireProfileOrAdmin(c.env.DB, c.env.MASTER_PASSCODE, c.req.raw.headers, profileId);
+  const ip = c.req.raw.headers.get("CF-Connecting-IP") ?? "unknown";
+  const auth = await requireProfileOrAdmin(c.env.DB, c.env.MASTER_PASSCODE, c.req.raw.headers, profileId, ip);
   if (auth instanceof Response) return auth;
 
   const body = await c.req.json<{ sectionLabel: string; mediaIds: string[] }>();
@@ -534,7 +549,8 @@ app.post("/api/profiles/:id/media/reorder", async (c) => {
 app.put("/api/profiles/:id/media/:mediaId", async (c) => {
   const profileId = c.req.param("id");
   const mediaId = c.req.param("mediaId");
-  const auth = await requireProfileOrAdmin(c.env.DB, c.env.MASTER_PASSCODE, c.req.raw.headers, profileId);
+  const ip = c.req.raw.headers.get("CF-Connecting-IP") ?? "unknown";
+  const auth = await requireProfileOrAdmin(c.env.DB, c.env.MASTER_PASSCODE, c.req.raw.headers, profileId, ip);
   if (auth instanceof Response) return auth;
 
   const existing = await c.env.DB.prepare(
@@ -605,7 +621,8 @@ app.put("/api/profiles/:id/media/:mediaId", async (c) => {
 app.delete("/api/profiles/:id/media/:mediaId", async (c) => {
   const profileId = c.req.param("id");
   const mediaId = c.req.param("mediaId");
-  const auth = await requireProfileOrAdmin(c.env.DB, c.env.MASTER_PASSCODE, c.req.raw.headers, profileId);
+  const ip = c.req.raw.headers.get("CF-Connecting-IP") ?? "unknown";
+  const auth = await requireProfileOrAdmin(c.env.DB, c.env.MASTER_PASSCODE, c.req.raw.headers, profileId, ip);
   if (auth instanceof Response) return auth;
 
   const result = await c.env.DB.prepare(
