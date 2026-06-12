@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { ArrowLeft, LogOut } from "lucide-react";
+import { ArrowLeft, LogOut, Home as HomeIcon, Search as SearchIcon, Bookmark, Settings as SettingsIcon, X as XIcon } from "lucide-react";
 import { useInactivityTimer } from "@/hooks/use-inactivity-timer";
 import { Button } from "@/components/ui/button";
 import { getIcon, hexToRgb } from "@/lib/registry";
@@ -19,44 +19,88 @@ const SECTION_TAB_MAP = {
   "Clips & Extras": "clips",
 };
 
-const PROFILE_TABS = [
-  { key: "home",  label: "Home"     },
+const BOTTOM_NAV_TABS = [
+  { key: "home",     label: "Home",     Icon: HomeIcon     },
+  { key: "search",   label: "Search",   Icon: SearchIcon   },
+  { key: "list",     label: "My List",  Icon: Bookmark     },
+  { key: "settings", label: "Settings", Icon: SettingsIcon },
+];
+
+const HOME_FILTERS = [
+  { key: "all",   label: "All"      },
   { key: "shows", label: "TV Shows" },
   { key: "clips", label: "Clips"    },
 ];
 
-// ── Top-level category tab bar ────────────────────────────────────────────────
-function ProfileTabNav({ activeTab, onTabChange, accentColor, isWestern, isNeon, isStudio }) {
+// ── Bottom navigation bar ─────────────────────────────────────────────────────
+function BottomNavBar({ activeTab, onTabChange, accentColor, isWestern, isNeon, isStudio }) {
   return (
-    <div style={{
-      display: "flex", gap: "0.25rem",
-      padding: "0.55rem 1.25rem",
-      borderBottom: isWestern ? "1px solid #3a2a1c" : isNeon ? "1px solid #2a1845" : isStudio ? "1px solid #2d2419" : "1px solid rgba(255,255,255,0.06)",
-      background: isWestern ? "rgba(26,20,16,0.9)" : isNeon ? "rgba(7,5,26,0.9)" : isStudio ? "rgba(24,18,12,0.9)" : "rgba(5,5,7,0.9)",
-      backdropFilter: "blur(12px)",
-      flexShrink: 0,
-      zIndex: 10,
+    <nav style={{
+      position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 50,
+      display: "flex",
+      background: isWestern ? "rgba(20,15,11,0.97)" : isNeon ? "rgba(5,4,20,0.97)" : isStudio ? "rgba(18,13,8,0.97)" : "rgba(6,6,10,0.97)",
+      backdropFilter: "blur(24px)",
+      borderTop: isWestern ? "1px solid #3a2a1c" : isNeon ? "1px solid #2a1845" : isStudio ? "1px solid #2d2419" : "1px solid rgba(255,255,255,0.07)",
+      paddingBottom: "env(safe-area-inset-bottom, 0px)",
     }}>
-      {PROFILE_TABS.map(({ key, label }) => {
+      {BOTTOM_NAV_TABS.map(({ key, label, Icon }) => {
         const active = key === activeTab;
         return (
           <button
             key={key}
             onClick={() => onTabChange(key)}
             style={{
-              padding: "0.32rem 0.9rem",
+              flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+              padding: "0.65rem 0.25rem 0.55rem",
+              gap: "0.22rem",
+              color: active ? accentColor : "rgba(255,255,255,0.32)",
+              background: "none", border: "none", cursor: "pointer",
+              transition: "color 0.15s ease",
+              WebkitTapHighlightColor: "transparent",
+            }}
+          >
+            <Icon size={active ? 22 : 20} strokeWidth={active ? 2.2 : 1.5} />
+            <span style={{ fontSize: "0.58rem", fontWeight: active ? 700 : 400, letterSpacing: "0.05em", textTransform: "uppercase" }}>
+              {label}
+            </span>
+          </button>
+        );
+      })}
+    </nav>
+  );
+}
+
+// ── Home filter pills ─────────────────────────────────────────────────────────
+function HomeFilterPills({ activeFilter, onFilterChange, accentColor, isWestern, isNeon, isStudio }) {
+  return (
+    <div style={{
+      display: "flex", gap: "0.4rem",
+      padding: "0.55rem 1.25rem",
+      borderBottom: isWestern ? "1px solid #3a2a1c" : isNeon ? "1px solid #2a1845" : isStudio ? "1px solid #2d2419" : "1px solid rgba(255,255,255,0.05)",
+      background: isWestern ? "rgba(26,20,16,0.6)" : isNeon ? "rgba(7,5,26,0.6)" : isStudio ? "rgba(24,18,12,0.6)" : "rgba(5,5,7,0.6)",
+      flexShrink: 0,
+    }}>
+      {HOME_FILTERS.map(({ key, label }) => {
+        const active = key === activeFilter;
+        return (
+          <button
+            key={key}
+            onClick={() => onFilterChange(key)}
+            style={{
+              padding: "0.28rem 0.85rem",
               borderRadius: "2rem",
               fontFamily: isWestern || isStudio ? "'Playfair Display', serif" : "Outfit, sans-serif",
-              fontWeight: isWestern || isStudio ? 600 : 700,
-              fontStyle: isStudio ? "italic" : "normal",
-              fontSize: "0.72rem",
-              letterSpacing: isWestern || isStudio ? "0.02em" : "0.06em",
+              fontWeight: 600,
+              fontStyle: isStudio && active ? "italic" : "normal",
+              fontSize: "0.7rem",
+              letterSpacing: isWestern || isStudio ? "0.01em" : "0.05em",
               textTransform: isWestern || isStudio ? "none" : "uppercase",
-              color: active ? "#fff" : "rgba(255,255,255,0.45)",
+              color: active ? "#fff" : "rgba(255,255,255,0.42)",
               background: active ? accentColor : "rgba(255,255,255,0.05)",
               border: `1px solid ${active ? "transparent" : "rgba(255,255,255,0.08)"}`,
               cursor: "pointer",
-              transition: "all 0.2s ease",
+              transition: "all 0.18s ease",
+              WebkitTapHighlightColor: "transparent",
             }}
           >
             {label}
@@ -301,6 +345,137 @@ function ProfileMediaCard({ item, itemIdx, lastIdx, accentColor, isMobile, onCli
   );
 }
 
+// ── Search view ───────────────────────────────────────────────────────────────
+function SearchView({ media, accentColor, rgb, isMobile, isWestern, isNeon, isStudio, onPlay }) {
+  const [query, setQuery] = useState("");
+  const q = query.trim().toLowerCase();
+  const results = q.length >= 1
+    ? media.filter((m) =>
+        m.title?.toLowerCase().includes(q) ||
+        m.sectionLabel?.toLowerCase().includes(q) ||
+        m.description?.toLowerCase().includes(q)
+      )
+    : [];
+  const px = isMobile ? "1rem" : "2rem";
+
+  return (
+    <div style={{ flex: 1, display: "flex", flexDirection: "column", padding: `1.25rem ${px} 0`, overflowY: "auto", scrollbarWidth: "none" }}>
+      {/* Search input */}
+      <div style={{ position: "relative", marginBottom: "1.25rem" }}>
+        <SearchIcon size={15} style={{ position: "absolute", left: "0.9rem", top: "50%", transform: "translateY(-50%)", color: "rgba(255,255,255,0.32)", pointerEvents: "none" }} />
+        <input
+          type="text"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Search titles, shows, clips…"
+          autoFocus
+          style={{
+            width: "100%", boxSizing: "border-box",
+            padding: "0.72rem 2.4rem 0.72rem 2.25rem",
+            borderRadius: "0.75rem",
+            background: isWestern ? "rgba(255,255,255,0.05)" : isNeon ? "rgba(255,255,255,0.05)" : "rgba(255,255,255,0.06)",
+            border: `1px solid ${isWestern ? "#3a2a1c" : isNeon ? "#2a1845" : "rgba(255,255,255,0.1)"}`,
+            color: "#fff",
+            fontFamily: "Outfit, sans-serif",
+            fontSize: "0.88rem",
+            outline: "none",
+          }}
+        />
+        {query && (
+          <button onClick={() => setQuery("")} style={{ position: "absolute", right: "0.75rem", top: "50%", transform: "translateY(-50%)", color: "rgba(255,255,255,0.38)", background: "none", border: "none", cursor: "pointer", display: "flex", alignItems: "center" }}>
+            <XIcon size={14} />
+          </button>
+        )}
+      </div>
+
+      {/* States */}
+      {q.length === 0 ? (
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "0.65rem", paddingBottom: "5rem" }}>
+          <SearchIcon size={42} style={{ color: "rgba(255,255,255,0.08)" }} />
+          <p style={{ color: "rgba(255,255,255,0.28)", fontSize: "0.82rem", fontFamily: "Outfit, sans-serif" }}>Search episodes, clips, trailers…</p>
+        </div>
+      ) : results.length === 0 ? (
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "0.5rem", paddingBottom: "5rem" }}>
+          <p style={{ color: "rgba(255,255,255,0.38)", fontSize: "0.88rem", fontFamily: "Outfit, sans-serif" }}>No results for "{query}"</p>
+        </div>
+      ) : (
+        <div>
+          <p style={{ fontSize: "0.65rem", color: "rgba(255,255,255,0.28)", marginBottom: "1rem", letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 600, fontFamily: "Outfit, sans-serif" }}>
+            {results.length} result{results.length !== 1 ? "s" : ""}
+          </p>
+          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "repeat(2, 1fr)" : "repeat(4, 1fr)", gap: isMobile ? "0.65rem" : "0.8rem", paddingBottom: "5.5rem" }}>
+            {results.map((item) => (
+              <ProfileMediaCard
+                key={item.id}
+                item={item}
+                itemIdx={0}
+                lastIdx={-1}
+                accentColor={accentColor}
+                isMobile={isMobile}
+                onClick={() => onPlay(item)}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── My List placeholder ───────────────────────────────────────────────────────
+function MyListView({ accentColor, rgb, isMobile }) {
+  return (
+    <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "0.75rem", padding: "2rem", paddingBottom: "5rem" }}>
+      <div style={{ width: 60, height: 60, borderRadius: "50%", background: `rgba(${rgb},0.12)`, border: `1px solid rgba(${rgb},0.25)`, display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <Bookmark size={26} style={{ color: accentColor }} strokeWidth={1.5} />
+      </div>
+      <p style={{ color: "#fff", fontFamily: "Outfit, sans-serif", fontWeight: 600, fontSize: "1rem", marginTop: "0.25rem" }}>My List</p>
+      <p style={{ color: "rgba(255,255,255,0.35)", fontFamily: "Outfit, sans-serif", fontSize: "0.82rem", textAlign: "center", maxWidth: 260, lineHeight: 1.5 }}>
+        Bookmarking is coming soon — save your favorite episodes and clips here.
+      </p>
+    </div>
+  );
+}
+
+// ── Settings view ─────────────────────────────────────────────────────────────
+function SettingsView({ profile, accentColor, rgb, onExit, isMobile }) {
+  return (
+    <div style={{ flex: 1, overflowY: "auto", padding: isMobile ? "1.5rem 1rem" : "2rem", paddingBottom: "5.5rem", scrollbarWidth: "none" }}>
+      {/* Profile card */}
+      <div style={{ display: "flex", alignItems: "center", gap: "1rem", background: `rgba(${rgb},0.08)`, border: `1px solid rgba(${rgb},0.18)`, borderRadius: "1rem", padding: "1.1rem 1.25rem", marginBottom: "1.5rem" }}>
+        <div style={{ width: 46, height: 46, borderRadius: "50%", background: accentColor, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+          <span style={{ fontSize: "1.3rem" }}>🤠</span>
+        </div>
+        <div>
+          <p style={{ color: "#fff", fontFamily: "Outfit, sans-serif", fontWeight: 700, fontSize: "0.95rem" }}>{profile.name}</p>
+          <p style={{ color: "rgba(255,255,255,0.35)", fontFamily: "Outfit, sans-serif", fontSize: "0.72rem", marginTop: "0.1rem", textTransform: "capitalize" }}>{profile.theme || "default"} theme</p>
+        </div>
+      </div>
+
+      {/* Setting rows */}
+      {[
+        { label: "Change PIN", note: "Coming soon", action: null },
+        { label: "Report a Bug", note: "Opens feedback form", action: null },
+      ].map(({ label, note }) => (
+        <div key={label} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "1rem 0", borderBottom: "1px solid rgba(255,255,255,0.06)", cursor: "default" }}>
+          <div>
+            <p style={{ color: "#fff", fontFamily: "Outfit, sans-serif", fontWeight: 500, fontSize: "0.88rem" }}>{label}</p>
+            <p style={{ color: "rgba(255,255,255,0.3)", fontFamily: "Outfit, sans-serif", fontSize: "0.7rem", marginTop: "0.1rem" }}>{note}</p>
+          </div>
+          <span style={{ color: "rgba(255,255,255,0.2)", fontSize: "1rem" }}>›</span>
+        </div>
+      ))}
+
+      <button
+        onClick={onExit}
+        style={{ marginTop: "2rem", width: "100%", padding: "0.8rem", borderRadius: "0.75rem", background: "rgba(255,60,60,0.1)", border: "1px solid rgba(255,60,60,0.25)", color: "#ff6b6b", fontFamily: "Outfit, sans-serif", fontWeight: 600, fontSize: "0.85rem", cursor: "pointer" }}
+      >
+        Exit Profile
+      </button>
+    </div>
+  );
+}
+
 // ── Main component ────────────────────────────────────────────────────────────
 export default function ProfileShell() {
   const { id } = useParams();
@@ -312,6 +487,7 @@ export default function ProfileShell() {
   const [loadingMedia, setLoadingMedia] = useState(true);
   const [playing, setPlaying] = useState(null);
   const [tab, setTab] = useState("home");
+  const [homeFilter, setHomeFilter] = useState("all");
 
   const sectionRefs = useRef({});
 
@@ -367,6 +543,15 @@ export default function ProfileShell() {
     const item = section.items[itemIdx];
     if (!item) return;
     localStorage.setItem(`mh_last_${id}_${sectionLabel}`, String(itemIdx));
+    setPlaying(item);
+  }, [grouped, id]);
+
+  const playDirect = useCallback((item) => {
+    const section = grouped.find((g) => g.label === item.sectionLabel);
+    if (section) {
+      const idx = section.items.findIndex((m) => m.id === item.id);
+      if (idx >= 0) localStorage.setItem(`mh_last_${id}_${item.sectionLabel}`, String(idx));
+    }
     setPlaying(item);
   }, [grouped, id]);
 
@@ -448,24 +633,41 @@ export default function ProfileShell() {
         </Button>
       </header>
 
-      {/* ── Category tab nav ── */}
-      <ProfileTabNav
-        activeTab={tab}
-        onTabChange={(t) => { setTab(t); }}
-        accentColor={profile.color}
-        isWestern={isWestern}
-        isNeon={isNeon}
-        isStudio={isStudio}
-      />
+      {/* ── Filter pills (home tab only) ── */}
+      {tab === "home" && (
+        <HomeFilterPills
+          activeFilter={homeFilter}
+          onFilterChange={setHomeFilter}
+          accentColor={profile.color}
+          isWestern={isWestern}
+          isNeon={isNeon}
+          isStudio={isStudio}
+        />
+      )}
 
       {/* ── Main content ── */}
       <main className="flex-1 flex flex-col overflow-hidden">
-        {loadingMedia ? (
+        {tab === "search" ? (
+          <SearchView
+            media={media}
+            accentColor={profile.color}
+            rgb={rgb}
+            isMobile={isMobile}
+            isWestern={isWestern}
+            isNeon={isNeon}
+            isStudio={isStudio}
+            onPlay={playDirect}
+          />
+        ) : tab === "list" ? (
+          <MyListView accentColor={profile.color} rgb={rgb} isMobile={isMobile} />
+        ) : tab === "settings" ? (
+          <SettingsView profile={profile} accentColor={profile.color} rgb={rgb} onExit={exit} isMobile={isMobile} />
+        ) : loadingMedia ? (
           <p data-testid="profile-media-loading" className="text-center text-white/30 text-sm mt-16">Loading…</p>
         ) : (() => {
-          const visibleGroups = tab === "home"
+          const visibleGroups = homeFilter === "all"
             ? grouped
-            : grouped.filter((g) => SECTION_TAB_MAP[g.label] === tab);
+            : grouped.filter((g) => SECTION_TAB_MAP[g.label] === homeFilter);
           const visibleWithContent = visibleGroups.filter((g) => g.items.length > 0);
 
           if (visibleWithContent.length === 0) return (
@@ -498,7 +700,7 @@ export default function ProfileShell() {
             />
 
             {/* Content rows */}
-            <div style={{ paddingBottom: "3rem" }}>
+            <div style={{ paddingBottom: "5.5rem" }}>
               {visibleGroups.map((group) => {
                 const last = lastWatchedIdx(group.label);
                 const hasDirectVideo = group.items.some((m) => m.sourceType === "direct");
@@ -526,7 +728,6 @@ export default function ProfileShell() {
                       <span style={{ marginLeft: "0.25rem", fontSize: "0.65rem", color: "rgba(255,255,255,0.28)", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase" }}>
                         {group.items.length}
                       </span>
-                      {/* "Full episodes coming soon" chip — shown when section only has trailers */}
                       {!hasDirectVideo && group.items.length > 0 && (
                         <span style={{
                           fontSize: "0.55rem", fontWeight: 800, letterSpacing: "0.1em", textTransform: "uppercase",
@@ -577,6 +778,16 @@ export default function ProfileShell() {
           );
         })()}
       </main>
+
+      {/* ── Bottom navigation ── */}
+      <BottomNavBar
+        activeTab={tab}
+        onTabChange={setTab}
+        accentColor={profile.color}
+        isWestern={isWestern}
+        isNeon={isNeon}
+        isStudio={isStudio}
+      />
 
       {/* ── Video player (watch-only, no edit/delete) ── */}
       <VideoPlayer
