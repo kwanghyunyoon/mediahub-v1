@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
+import { Search as SearchIcon, Bookmark, X as XIcon } from "lucide-react";
 import { listMedia, clearProfilePasscode } from "@/lib/api";
 import KidsLayout, { DEFAULT_TABS } from "@/layouts/KidsLayout";
 import KidsDesktopLayout from "@/layouts/KidsDesktopLayout";
@@ -367,7 +368,7 @@ function StreamingContent({ sections, isMobile, playAll, playSection, lastWatche
       <SectionTabBar sections={sections} isMobile={isMobile} onSelect={scrollToSection} />
 
       {/* ── Content rows ── */}
-      <div style={{ paddingBottom: isMobile ? "2rem" : "3rem" }}>
+      <div style={{ paddingBottom: isMobile ? "5.5rem" : "3rem" }}>
         {sections.map((section) => {
           const last = lastWatchedIdx(section.label);
           return (
@@ -417,6 +418,191 @@ function ComingSoon({ label }) {
   );
 }
 
+const KIDS_HOME_FILTERS = [
+  { key: "all",    label: "All",      emoji: "🎬" },
+  { key: "shows",  label: "TV Shows", emoji: "📺" },
+  { key: "movies", label: "Movies",   emoji: "🎥" },
+  { key: "clips",  label: "Clips",    emoji: "✂️" },
+];
+
+function KidsHomeFilterPills({ activeFilter, onFilterChange, isMobile }) {
+  return (
+    <div style={{
+      display: "flex", gap: "0.4rem", overflowX: "auto",
+      padding: isMobile ? "0.55rem 1rem" : "0.6rem 2rem",
+      borderBottom: "1px solid rgba(255,255,255,0.05)",
+      background: "rgba(7,7,7,0.7)",
+      scrollbarWidth: "none", flexShrink: 0,
+    }}>
+      {KIDS_HOME_FILTERS.map(({ key, label, emoji }) => {
+        const active = key === activeFilter;
+        return (
+          <button
+            key={key}
+            onClick={() => onFilterChange(key)}
+            style={{
+              flexShrink: 0,
+              display: "flex", alignItems: "center", gap: "0.3rem",
+              padding: "0.3rem 0.85rem",
+              borderRadius: "2rem",
+              fontFamily: "Nunito, Arial, sans-serif",
+              fontWeight: 800,
+              fontSize: "0.7rem",
+              letterSpacing: "0.04em",
+              color: active ? "#fff" : "rgba(255,255,255,0.4)",
+              background: active ? "rgba(255,255,255,0.14)" : "rgba(255,255,255,0.05)",
+              border: `1px solid ${active ? "rgba(255,255,255,0.22)" : "rgba(255,255,255,0.08)"}`,
+              cursor: "pointer",
+              transition: "all 0.18s ease",
+              WebkitTapHighlightColor: "transparent",
+            }}
+          >
+            <span style={{ fontSize: "0.75rem" }}>{emoji}</span>
+            {label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function KidsSearchView({ media, sections, isMobile, onPlay }) {
+  const [query, setQuery] = useState("");
+  const q = query.trim().toLowerCase();
+  const results = q.length >= 1
+    ? media.filter((m) =>
+        m.title?.toLowerCase().includes(q) ||
+        m.sectionLabel?.toLowerCase().includes(q) ||
+        m.description?.toLowerCase().includes(q)
+      )
+    : [];
+  const px = isMobile ? "1rem" : "2rem";
+
+  const getSectionForItem = (item) => {
+    const s = sections.find((s) => s.label === item.sectionLabel);
+    return s || { config: FALLBACK_CONFIG, items: [item], label: item.sectionLabel };
+  };
+
+  return (
+    <div style={{ flex: 1, display: "flex", flexDirection: "column", background: "#070707", overflowY: "auto", scrollbarWidth: "none" }}>
+      <div style={{ padding: `1.25rem ${px} 0` }}>
+        {/* Search input */}
+        <div style={{ position: "relative", marginBottom: "1.25rem" }}>
+          <SearchIcon size={15} style={{ position: "absolute", left: "0.9rem", top: "50%", transform: "translateY(-50%)", color: "rgba(255,255,255,0.3)", pointerEvents: "none" }} />
+          <input
+            type="text"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Find shows, movies, clips…"
+            autoFocus
+            style={{
+              width: "100%", boxSizing: "border-box",
+              padding: "0.75rem 2.4rem 0.75rem 2.25rem",
+              borderRadius: "1rem",
+              background: "rgba(255,255,255,0.07)",
+              border: "1px solid rgba(255,255,255,0.1)",
+              color: "#fff",
+              fontFamily: "Nunito, sans-serif",
+              fontWeight: 700,
+              fontSize: "0.9rem",
+              outline: "none",
+            }}
+          />
+          {query && (
+            <button onClick={() => setQuery("")} style={{ position: "absolute", right: "0.75rem", top: "50%", transform: "translateY(-50%)", color: "rgba(255,255,255,0.35)", background: "none", border: "none", cursor: "pointer", display: "flex", alignItems: "center" }}>
+              <XIcon size={14} />
+            </button>
+          )}
+        </div>
+
+        {q.length === 0 ? (
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "0.75rem", paddingTop: "4rem", paddingBottom: "6rem" }}>
+            <span style={{ fontSize: "3rem", opacity: 0.25 }}>🔍</span>
+            <p style={{ color: "rgba(255,255,255,0.25)", fontFamily: "Nunito, sans-serif", fontWeight: 700, fontSize: "0.82rem" }}>Search for your favorite shows and clips!</p>
+          </div>
+        ) : results.length === 0 ? (
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "0.5rem", paddingTop: "4rem" }}>
+            <span style={{ fontSize: "2.5rem", opacity: 0.3 }}>😕</span>
+            <p style={{ color: "rgba(255,255,255,0.35)", fontFamily: "Nunito, sans-serif", fontWeight: 700 }}>Nothing found for "{query}"</p>
+          </div>
+        ) : (
+          <>
+            <p style={{ fontSize: "0.65rem", color: "rgba(255,255,255,0.28)", marginBottom: "1rem", letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 800, fontFamily: "Outfit, sans-serif" }}>
+              {results.length} result{results.length !== 1 ? "s" : ""}
+            </p>
+            <div style={{ display: "grid", gridTemplateColumns: isMobile ? "repeat(2, 1fr)" : "repeat(4, 1fr)", gap: isMobile ? "0.65rem" : "0.8rem", paddingBottom: "6rem" }}>
+              {results.map((item) => {
+                const section = getSectionForItem(item);
+                return (
+                  <VideoCard
+                    key={item.id}
+                    item={item}
+                    idx={0}
+                    last={-1}
+                    section={section}
+                    isMobile={isMobile}
+                    onPlay={() => onPlay(item)}
+                  />
+                );
+              })}
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function KidsMyListView({ isMobile }) {
+  return (
+    <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "0.85rem", background: "#070707", padding: "2rem", paddingBottom: "6rem" }}>
+      <span style={{ fontSize: "3.5rem", opacity: 0.35 }}>⭐</span>
+      <p style={{ color: "#fff", fontFamily: "Nunito, sans-serif", fontWeight: 800, fontSize: "1rem" }}>My List</p>
+      <p style={{ color: "rgba(255,255,255,0.3)", fontFamily: "Nunito, sans-serif", fontWeight: 600, fontSize: "0.82rem", textAlign: "center", maxWidth: 240, lineHeight: 1.5 }}>
+        Save your favorite shows and come back to them here — coming soon!
+      </p>
+    </div>
+  );
+}
+
+function KidsSettingsView({ profile, intervalMins, onTimerClick, onLogout }) {
+  return (
+    <div style={{ flex: 1, overflowY: "auto", background: "#070707", padding: "1.5rem 1.25rem", paddingBottom: "6rem", scrollbarWidth: "none" }}>
+      {/* Profile card */}
+      <div style={{ display: "flex", alignItems: "center", gap: "1rem", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "1rem", padding: "1rem 1.25rem", marginBottom: "1.5rem" }}>
+        <div style={{ width: 46, height: 46, borderRadius: "50%", background: "linear-gradient(135deg,#FF5200,#C030B0)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+          <span style={{ fontSize: "1.4rem" }}>🎬</span>
+        </div>
+        <div>
+          <p style={{ color: "#fff", fontFamily: "Nunito, sans-serif", fontWeight: 800, fontSize: "0.95rem" }}>{profile?.name}</p>
+          <p style={{ color: "rgba(255,255,255,0.35)", fontFamily: "Nunito, sans-serif", fontSize: "0.72rem", marginTop: "0.1rem" }}>Kids Profile</p>
+        </div>
+      </div>
+
+      {/* Check-in timer row */}
+      <button
+        onClick={onTimerClick}
+        style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "1rem 0", borderBottom: "1px solid rgba(255,255,255,0.06)", background: "none", border: "none", cursor: "pointer", borderBottom: "1px solid rgba(255,255,255,0.06)", paddingBottom: "1rem" }}
+      >
+        <div>
+          <p style={{ color: "#fff", fontFamily: "Nunito, sans-serif", fontWeight: 700, fontSize: "0.88rem", textAlign: "left" }}>⏰ Check-in Reminder</p>
+          <p style={{ color: "rgba(255,215,0,0.7)", fontFamily: "Nunito, sans-serif", fontSize: "0.72rem", marginTop: "0.1rem", textAlign: "left" }}>
+            {intervalMins > 0 ? `Every ${intervalMins} minutes` : "Off"}
+          </p>
+        </div>
+        <span style={{ color: "rgba(255,255,255,0.2)", fontSize: "1rem" }}>›</span>
+      </button>
+
+      <button
+        onClick={onLogout}
+        style={{ marginTop: "2rem", width: "100%", padding: "0.85rem", borderRadius: "0.85rem", background: "rgba(255,60,60,0.1)", border: "1px solid rgba(255,60,60,0.25)", color: "#ff6b6b", fontFamily: "Nunito, sans-serif", fontWeight: 800, fontSize: "0.85rem", cursor: "pointer" }}
+      >
+        Exit Profile
+      </button>
+    </div>
+  );
+}
+
 export default function KidsShell() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -425,6 +611,7 @@ export default function KidsShell() {
   const [loading, setLoading] = useState(true);
 
   const [tab, setTab] = useState("home");
+  const [homeFilter, setHomeFilter] = useState("all");
   const [playerState, setPlayerState] = useState(null);
   const [checkinOpen, setCheckinOpen] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -500,6 +687,17 @@ export default function KidsShell() {
     playSection(label, startIdx);
   };
 
+  const playDirect = (item) => {
+    const section = sections.find((s) => s.label === item.sectionLabel);
+    const startIdx = section ? section.items.findIndex((m) => m.id === item.id) : 0;
+    setPlayerState({
+      playlist: section?.items || [item],
+      startIdx: startIdx >= 0 ? startIdx : 0,
+      accentColor: getShowConfig(item.sectionLabel).accent,
+      sectionLabel: item.sectionLabel,
+    });
+  };
+
   if (!profile) return null;
 
   // Hero = first section that has a last-watched entry, otherwise first section
@@ -522,20 +720,45 @@ export default function KidsShell() {
           <div className="flex-1 flex items-center justify-center text-white/30 text-sm">
             Loading…
           </div>
+        ) : tab === "search" ? (
+          <KidsSearchView
+            media={media}
+            sections={sections}
+            isMobile={isMobile}
+            onPlay={playDirect}
+          />
+        ) : tab === "list" ? (
+          <KidsMyListView isMobile={isMobile} />
+        ) : tab === "settings" ? (
+          <KidsSettingsView
+            profile={profile}
+            intervalMins={intervalMins}
+            onTimerClick={() => setPickerOpen(true)}
+            onLogout={handleLogout}
+          />
         ) : (() => {
-          const filtered = tab === "home"
+          const filtered = homeFilter === "all"
             ? sections
-            : sections.filter((s) => SECTION_TAB_MAP[s.label] === tab);
-          return filtered.length === 0 ? (
-            <ComingSoon label={TABS.find((t) => t.key === tab)?.label || tab} />
-          ) : (
-            <StreamingContent
-              sections={filtered}
-              isMobile={isMobile}
-              playAll={playAll}
-              playSection={playSection}
-              lastWatchedIdx={lastWatchedIdx}
-            />
+            : sections.filter((s) => SECTION_TAB_MAP[s.label] === homeFilter);
+          return (
+            <>
+              <KidsHomeFilterPills
+                activeFilter={homeFilter}
+                onFilterChange={setHomeFilter}
+                isMobile={isMobile}
+              />
+              {filtered.length === 0 ? (
+                <ComingSoon label={KIDS_HOME_FILTERS.find((f) => f.key === homeFilter)?.label || homeFilter} />
+              ) : (
+                <StreamingContent
+                  sections={filtered}
+                  isMobile={isMobile}
+                  playAll={playAll}
+                  playSection={playSection}
+                  lastWatchedIdx={lastWatchedIdx}
+                />
+              )}
+            </>
           );
         })()}
       </Layout>

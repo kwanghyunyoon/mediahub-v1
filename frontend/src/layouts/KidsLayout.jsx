@@ -1,11 +1,11 @@
-import { Home, Tv, Film, Scissors } from "lucide-react";
+import { Home, Search, Bookmark, Settings } from "lucide-react";
 import { LogOut } from "lucide-react";
 
 export const DEFAULT_TABS = [
-  { key: "home",   Icon: Home,     label: "Home"     },
-  { key: "shows",  Icon: Tv,       label: "TV Shows"  },
-  { key: "movies", Icon: Film,     label: "Movies"   },
-  { key: "clips",  Icon: Scissors, label: "Clips"    },
+  { key: "home",     Icon: Home,     label: "Home"     },
+  { key: "search",   Icon: Search,   label: "Search"   },
+  { key: "list",     Icon: Bookmark, label: "My List"  },
+  { key: "settings", Icon: Settings, label: "Settings" },
 ];
 
 export default function KidsLayout({
