@@ -298,6 +298,39 @@ app.post("/api/profiles/:id/verify", async (c) => {
 });
 
 // ---------------------------------------------------------------------------
+// Public: change own passcode (requires current passcode)
+// ---------------------------------------------------------------------------
+
+app.post("/api/profiles/:id/change-passcode", async (c) => {
+  const ip = c.req.raw.headers.get("CF-Connecting-IP") ?? "unknown";
+  const id = c.req.param("id");
+  const rlKey = `chpw:${ip}:${id}`;
+  const blocked = rlCheck(rlKey);
+  if (blocked) return blocked;
+
+  const row = await c.env.DB.prepare("SELECT * FROM profiles WHERE id = ?")
+    .bind(id).first<ProfileRow>();
+  if (!row) return c.json({ detail: "Profile not found" }, 404);
+
+  let body: { currentPasscode?: unknown; newPasscode?: unknown };
+  try { body = await c.req.json(); } catch { return err(400, "Invalid JSON body"); }
+
+  if (typeof body.currentPasscode !== "string" || body.currentPasscode !== row.passcode) {
+    rlRecord(rlKey);
+    return c.json({ detail: "Wrong current passcode" }, 401);
+  }
+  if (typeof body.newPasscode !== "string" || !PASSCODE_RE.test(body.newPasscode)) {
+    return c.json({ detail: "newPasscode must be 4 digits" }, 422);
+  }
+
+  rlClear(rlKey);
+  await c.env.DB.prepare("UPDATE profiles SET passcode = ?, updatedAt = datetime('now') WHERE id = ?")
+    .bind(body.newPasscode, id).run();
+
+  return c.json({ ok: true });
+});
+
+// ---------------------------------------------------------------------------
 // Admin: list profiles (with passcode)
 // ---------------------------------------------------------------------------
 

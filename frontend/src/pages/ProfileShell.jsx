@@ -5,7 +5,8 @@ import { ArrowLeft, LogOut, Home as HomeIcon, Search as SearchIcon, Bookmark, Se
 import { useInactivityTimer } from "@/hooks/use-inactivity-timer";
 import { Button } from "@/components/ui/button";
 import { getIcon, hexToRgb } from "@/lib/registry";
-import { listMedia, clearProfilePasscode } from "@/lib/api";
+import { listMedia, clearProfilePasscode, changePasscode, submitFeedback } from "@/lib/api";
+import Keypad from "@/components/Keypad";
 import { getMyList, toggleMyList as toggleMyListStorage } from "@/lib/mylist";
 import VideoPlayer from "@/components/VideoPlayer";
 import { useIsMobile } from "@/hooks/use-is-mobile";
@@ -494,40 +495,208 @@ function MyListView({ media, myList, accentColor, rgb, isMobile, isWestern, isNe
 
 // ── Settings view ─────────────────────────────────────────────────────────────
 function SettingsView({ profile, accentColor, rgb, onExit, isMobile }) {
+  const [sheet, setSheet] = useState(null); // "pin" | "bug"
+  const [pinStep, setPinStep] = useState(1); // 1=current, 2=new, 3=confirm
+  const [pinError, setPinError] = useState(0);
+  const [newPin, setNewPin] = useState("");
+  const [pinMsg, setPinMsg] = useState("");
+  const [bugType, setBugType] = useState("Bug");
+  const [bugText, setBugText] = useState("");
+  const [bugStatus, setBugStatus] = useState("idle"); // idle | sending | done | error
+
+  const openSheet = (s) => { setSheet(s); setPinStep(1); setPinError(0); setNewPin(""); setPinMsg(""); setBugText(""); setBugStatus("idle"); };
+  const closeSheet = () => setSheet(null);
+
+  const handlePinStep = async (digits) => {
+    if (pinStep === 1) {
+      // Verify current PIN via API
+      try {
+        await changePasscode(profile.id, digits, digits); // send same as both to just check; no — need a verify call
+      } catch {}
+      // Actually, we verify via the change-passcode endpoint which checks currentPasscode.
+      // Use a dummy newPasscode to detect wrong current vs success — actually just move to step 2 optimistically
+      // and if the API rejects at step 3, we'll handle it.
+      setNewPin("");
+      setPinStep(2);
+    } else if (pinStep === 2) {
+      setNewPin(digits);
+      setPinStep(3);
+    } else if (pinStep === 3) {
+      if (digits !== newPin) {
+        setPinError((e) => e + 1);
+        setPinMsg("PINs don't match — try again");
+        setPinStep(2);
+        setNewPin("");
+        return;
+      }
+      // We need the current PIN — ask user again from step 1
+      // Better flow: store current PIN from step 1
+      setPinMsg("Changing PIN…");
+      try {
+        // We don't have currentPin stored — restart with proper 3-step
+        setPinMsg("✓ PIN changed successfully!");
+        setTimeout(() => closeSheet(), 1500);
+      } catch {
+        setPinError((e) => e + 1);
+        setPinMsg("Something went wrong. Try again.");
+        setPinStep(1);
+      }
+    }
+  };
+
+  // Better 3-step that actually stores currentPin
+  const [currentPin, setCurrentPin] = useState("");
+
+  const handlePin = async (digits) => {
+    if (pinStep === 1) {
+      setCurrentPin(digits);
+      setPinStep(2);
+    } else if (pinStep === 2) {
+      setNewPin(digits);
+      setPinStep(3);
+    } else {
+      if (digits !== newPin) {
+        setPinError((e) => e + 1);
+        setPinMsg("PINs don't match — re-enter new PIN");
+        setPinStep(2); setNewPin("");
+        return;
+      }
+      setPinMsg("Saving…");
+      try {
+        await changePasscode(profile.id, currentPin, digits);
+        setPinMsg("✓ PIN changed!");
+        setTimeout(() => closeSheet(), 1500);
+      } catch (e) {
+        const status = e?.response?.status;
+        if (status === 401) {
+          setPinError((e2) => e2 + 1);
+          setPinMsg("Wrong current PIN — try again");
+          setPinStep(1); setCurrentPin(""); setNewPin("");
+        } else {
+          setPinMsg("Error — try again later");
+        }
+      }
+    }
+  };
+
+  const handleBugSubmit = async () => {
+    if (!bugText.trim()) return;
+    setBugStatus("sending");
+    try {
+      await submitFeedback("mediahub", bugType, bugText.trim());
+      setBugStatus("done");
+      setTimeout(() => closeSheet(), 1800);
+    } catch {
+      setBugStatus("error");
+    }
+  };
+
+  const pinLabels = ["Enter your current PIN", "Enter your new PIN", "Confirm your new PIN"];
+
   return (
-    <div style={{ flex: 1, overflowY: "auto", padding: isMobile ? "1.5rem 1rem" : "2rem", paddingBottom: "5.5rem", scrollbarWidth: "none" }}>
-      {/* Profile card */}
-      <div style={{ display: "flex", alignItems: "center", gap: "1rem", background: `rgba(${rgb},0.08)`, border: `1px solid rgba(${rgb},0.18)`, borderRadius: "1rem", padding: "1.1rem 1.25rem", marginBottom: "1.5rem" }}>
-        <div style={{ width: 46, height: 46, borderRadius: "50%", background: accentColor, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-          <span style={{ fontSize: "1.3rem" }}>🤠</span>
+    <>
+      <div style={{ flex: 1, overflowY: "auto", padding: isMobile ? "1.5rem 1rem" : "2rem", paddingBottom: "5.5rem", scrollbarWidth: "none" }}>
+        {/* Profile card */}
+        <div style={{ display: "flex", alignItems: "center", gap: "1rem", background: `rgba(${rgb},0.08)`, border: `1px solid rgba(${rgb},0.18)`, borderRadius: "1rem", padding: "1.1rem 1.25rem", marginBottom: "1.5rem" }}>
+          <div style={{ width: 46, height: 46, borderRadius: "50%", background: accentColor, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+            <span style={{ fontSize: "1.3rem" }}>🤠</span>
+          </div>
+          <div>
+            <p style={{ color: "#fff", fontFamily: "Outfit, sans-serif", fontWeight: 700, fontSize: "0.95rem" }}>{profile.name}</p>
+            <p style={{ color: "rgba(255,255,255,0.35)", fontFamily: "Outfit, sans-serif", fontSize: "0.72rem", marginTop: "0.1rem", textTransform: "capitalize" }}>{profile.theme || "default"} theme</p>
+          </div>
         </div>
-        <div>
-          <p style={{ color: "#fff", fontFamily: "Outfit, sans-serif", fontWeight: 700, fontSize: "0.95rem" }}>{profile.name}</p>
-          <p style={{ color: "rgba(255,255,255,0.35)", fontFamily: "Outfit, sans-serif", fontSize: "0.72rem", marginTop: "0.1rem", textTransform: "capitalize" }}>{profile.theme || "default"} theme</p>
-        </div>
+
+        {/* Setting rows */}
+        {[
+          { label: "Change PIN", note: "Update your 4-digit passcode", key: "pin" },
+          { label: "Report a Bug", note: "Send feedback to the developer", key: "bug" },
+        ].map(({ label, note, key }) => (
+          <button
+            key={key}
+            onClick={() => openSheet(key)}
+            style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "1rem 0", borderBottom: "1px solid rgba(255,255,255,0.06)", background: "none", border: "none", borderBottom: "1px solid rgba(255,255,255,0.06)", paddingBottom: "1rem", marginBottom: "0", cursor: "pointer", WebkitTapHighlightColor: "transparent" }}
+          >
+            <div style={{ textAlign: "left" }}>
+              <p style={{ color: "#fff", fontFamily: "Outfit, sans-serif", fontWeight: 500, fontSize: "0.88rem" }}>{label}</p>
+              <p style={{ color: "rgba(255,255,255,0.3)", fontFamily: "Outfit, sans-serif", fontSize: "0.7rem", marginTop: "0.15rem" }}>{note}</p>
+            </div>
+            <span style={{ color: "rgba(255,255,255,0.28)", fontSize: "1.1rem", paddingLeft: "1rem" }}>›</span>
+          </button>
+        ))}
+
+        <button onClick={onExit} style={{ marginTop: "2rem", width: "100%", padding: "0.8rem", borderRadius: "0.75rem", background: "rgba(255,60,60,0.1)", border: "1px solid rgba(255,60,60,0.25)", color: "#ff6b6b", fontFamily: "Outfit, sans-serif", fontWeight: 600, fontSize: "0.85rem", cursor: "pointer" }}>
+          Exit Profile
+        </button>
       </div>
 
-      {/* Setting rows */}
-      {[
-        { label: "Change PIN", note: "Coming soon", action: null },
-        { label: "Report a Bug", note: "Opens feedback form", action: null },
-      ].map(({ label, note }) => (
-        <div key={label} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "1rem 0", borderBottom: "1px solid rgba(255,255,255,0.06)", cursor: "default" }}>
-          <div>
-            <p style={{ color: "#fff", fontFamily: "Outfit, sans-serif", fontWeight: 500, fontSize: "0.88rem" }}>{label}</p>
-            <p style={{ color: "rgba(255,255,255,0.3)", fontFamily: "Outfit, sans-serif", fontSize: "0.7rem", marginTop: "0.1rem" }}>{note}</p>
-          </div>
-          <span style={{ color: "rgba(255,255,255,0.2)", fontSize: "1rem" }}>›</span>
-        </div>
-      ))}
+      {/* ── Sheets ── */}
+      <AnimatePresence>
+        {sheet && (
+          <>
+            <motion.div key="backdrop" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              style={{ position: "fixed", inset: 0, zIndex: 60, background: "rgba(0,0,0,0.65)" }}
+              onClick={closeSheet}
+            />
+            <motion.div key="sheet" initial={{ y: "100%" }} animate={{ y: 0 }} exit={{ y: "100%" }}
+              transition={{ type: "spring", damping: 28, stiffness: 300 }}
+              style={{ position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 61, borderRadius: "1.5rem 1.5rem 0 0", background: "#0d0d14", borderTop: `2px solid rgba(${rgb},0.3)`, paddingBottom: "env(safe-area-inset-bottom, 0px)" }}
+            >
+              {/* Sheet header */}
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "1.2rem 1.5rem 0" }}>
+                <p style={{ color: "#fff", fontFamily: "Outfit, sans-serif", fontWeight: 700, fontSize: "0.95rem" }}>
+                  {sheet === "pin" ? pinLabels[pinStep - 1] : "Report a Bug"}
+                </p>
+                <button onClick={closeSheet} style={{ background: "none", border: "none", color: "rgba(255,255,255,0.4)", cursor: "pointer", display: "flex" }}>
+                  <XIcon size={18} />
+                </button>
+              </div>
 
-      <button
-        onClick={onExit}
-        style={{ marginTop: "2rem", width: "100%", padding: "0.8rem", borderRadius: "0.75rem", background: "rgba(255,60,60,0.1)", border: "1px solid rgba(255,60,60,0.25)", color: "#ff6b6b", fontFamily: "Outfit, sans-serif", fontWeight: 600, fontSize: "0.85rem", cursor: "pointer" }}
-      >
-        Exit Profile
-      </button>
-    </div>
+              {/* PIN sheet */}
+              {sheet === "pin" && (
+                <div style={{ padding: "1.5rem 1.5rem 2rem", display: "flex", flexDirection: "column", alignItems: "center", gap: "0.5rem" }}>
+                  {pinMsg && (
+                    <p style={{ fontSize: "0.78rem", color: pinMsg.startsWith("✓") ? "#4ade80" : "#f87171", fontFamily: "Outfit, sans-serif", marginBottom: "0.5rem" }}>{pinMsg}</p>
+                  )}
+                  <Keypad accentColor={accentColor} onSubmit={handlePin} errorKey={pinError} testIdPrefix="settings-pin" />
+                </div>
+              )}
+
+              {/* Bug report sheet */}
+              {sheet === "bug" && (
+                <div style={{ padding: "1.25rem 1.5rem 2rem", display: "flex", flexDirection: "column", gap: "1rem" }}>
+                  {/* Issue type toggle */}
+                  <div style={{ display: "flex", gap: "0.5rem" }}>
+                    {["Bug", "Suggestion", "Other"].map((t) => (
+                      <button key={t} onClick={() => setBugType(t)} style={{ flex: 1, padding: "0.5rem", borderRadius: "0.6rem", fontFamily: "Outfit, sans-serif", fontWeight: 600, fontSize: "0.78rem", cursor: "pointer", background: bugType === t ? accentColor : "rgba(255,255,255,0.06)", color: bugType === t ? "#fff" : "rgba(255,255,255,0.45)", border: `1px solid ${bugType === t ? "transparent" : "rgba(255,255,255,0.1)"}`, transition: "all 0.15s" }}>
+                        {t}
+                      </button>
+                    ))}
+                  </div>
+                  {/* Text area */}
+                  <textarea
+                    value={bugText}
+                    onChange={(e) => setBugText(e.target.value)}
+                    placeholder="Describe the issue or idea…"
+                    rows={4}
+                    style={{ width: "100%", boxSizing: "border-box", padding: "0.75rem", borderRadius: "0.75rem", background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", color: "#fff", fontFamily: "Outfit, sans-serif", fontSize: "0.85rem", resize: "none", outline: "none" }}
+                  />
+                  {bugStatus === "error" && <p style={{ color: "#f87171", fontSize: "0.75rem" }}>Failed to send — try again.</p>}
+                  {bugStatus === "done" && <p style={{ color: "#4ade80", fontSize: "0.75rem" }}>✓ Feedback sent!</p>}
+                  <button
+                    onClick={handleBugSubmit}
+                    disabled={!bugText.trim() || bugStatus === "sending" || bugStatus === "done"}
+                    style={{ padding: "0.8rem", borderRadius: "0.75rem", fontFamily: "Outfit, sans-serif", fontWeight: 700, fontSize: "0.85rem", background: accentColor, color: "#fff", border: "none", cursor: "pointer", opacity: !bugText.trim() || bugStatus === "sending" ? 0.5 : 1 }}
+                  >
+                    {bugStatus === "sending" ? "Sending…" : "Send Feedback"}
+                  </button>
+                </div>
+              )}
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+    </>
   );
 }
 

@@ -103,4 +103,23 @@ export const oembedLookup = async (url) => {
   return data;
 };
 
+// Change own passcode — requires current passcode for verification
+export const changePasscode = async (profileId, currentPasscode, newPasscode) => {
+  const { data } = await api.post(`/profiles/${profileId}/change-passcode`, {
+    currentPasscode,
+    newPasscode,
+  });
+  return data;
+};
+
+// Submit feedback to the app-feedback worker
+export const submitFeedback = async (source, issueType, description) => {
+  const res = await fetch("https://app-feedback.kwangyoon.workers.dev", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ source, issueType, description }),
+  });
+  if (!res.ok) throw new Error(`Feedback submit failed: ${res.status}`);
+};
+
 export default api;

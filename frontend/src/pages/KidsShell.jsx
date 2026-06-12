@@ -3,7 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
 import { Search as SearchIcon, Bookmark, X as XIcon } from "lucide-react";
-import { listMedia, clearProfilePasscode } from "@/lib/api";
+import { listMedia, clearProfilePasscode, submitFeedback } from "@/lib/api";
 import { getMyList, toggleMyList as toggleMyListStorage } from "@/lib/mylist";
 import KidsLayout, { DEFAULT_TABS } from "@/layouts/KidsLayout";
 import KidsDesktopLayout from "@/layouts/KidsDesktopLayout";
@@ -626,40 +626,106 @@ function KidsMyListView({ media, myList, sections, isMobile, onPlay, onToggle })
 }
 
 function KidsSettingsView({ profile, intervalMins, onTimerClick, onLogout }) {
+  const [bugOpen, setBugOpen] = useState(false);
+  const [bugType, setBugType] = useState("Bug");
+  const [bugText, setBugText] = useState("");
+  const [bugStatus, setBugStatus] = useState("idle");
+
+  const openBug = () => { setBugOpen(true); setBugText(""); setBugStatus("idle"); };
+  const closeBug = () => setBugOpen(false);
+
+  const handleBugSubmit = async () => {
+    if (!bugText.trim()) return;
+    setBugStatus("sending");
+    try {
+      await submitFeedback("mediahub-kids", bugType, bugText.trim());
+      setBugStatus("done");
+      setTimeout(() => closeBug(), 1800);
+    } catch {
+      setBugStatus("error");
+    }
+  };
+
   return (
-    <div style={{ flex: 1, overflowY: "auto", background: "#070707", padding: "1.5rem 1.25rem", paddingBottom: "6rem", scrollbarWidth: "none" }}>
-      {/* Profile card */}
-      <div style={{ display: "flex", alignItems: "center", gap: "1rem", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "1rem", padding: "1rem 1.25rem", marginBottom: "1.5rem" }}>
-        <div style={{ width: 46, height: 46, borderRadius: "50%", background: "linear-gradient(135deg,#FF5200,#C030B0)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-          <span style={{ fontSize: "1.4rem" }}>🎬</span>
+    <>
+      <div style={{ flex: 1, overflowY: "auto", background: "#070707", padding: "1.5rem 1.25rem", paddingBottom: "6rem", scrollbarWidth: "none" }}>
+        {/* Profile card */}
+        <div style={{ display: "flex", alignItems: "center", gap: "1rem", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "1rem", padding: "1rem 1.25rem", marginBottom: "1.5rem" }}>
+          <div style={{ width: 46, height: 46, borderRadius: "50%", background: "linear-gradient(135deg,#FF5200,#C030B0)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+            <span style={{ fontSize: "1.4rem" }}>🎬</span>
+          </div>
+          <div>
+            <p style={{ color: "#fff", fontFamily: "Nunito, sans-serif", fontWeight: 800, fontSize: "0.95rem" }}>{profile?.name}</p>
+            <p style={{ color: "rgba(255,255,255,0.35)", fontFamily: "Nunito, sans-serif", fontSize: "0.72rem", marginTop: "0.1rem" }}>Kids Profile</p>
+          </div>
         </div>
-        <div>
-          <p style={{ color: "#fff", fontFamily: "Nunito, sans-serif", fontWeight: 800, fontSize: "0.95rem" }}>{profile?.name}</p>
-          <p style={{ color: "rgba(255,255,255,0.35)", fontFamily: "Nunito, sans-serif", fontSize: "0.72rem", marginTop: "0.1rem" }}>Kids Profile</p>
-        </div>
+
+        {/* Check-in timer row */}
+        <button onClick={onTimerClick} style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", paddingBottom: "1rem", marginBottom: "0", borderBottom: "1px solid rgba(255,255,255,0.06)", background: "none", border: "none", borderBottom: "1px solid rgba(255,255,255,0.06)", paddingBottom: "1rem", cursor: "pointer", WebkitTapHighlightColor: "transparent" }}>
+          <div>
+            <p style={{ color: "#fff", fontFamily: "Nunito, sans-serif", fontWeight: 700, fontSize: "0.88rem", textAlign: "left" }}>⏰ Check-in Reminder</p>
+            <p style={{ color: "rgba(255,215,0,0.7)", fontFamily: "Nunito, sans-serif", fontSize: "0.72rem", marginTop: "0.1rem", textAlign: "left" }}>
+              {intervalMins > 0 ? `Every ${intervalMins} minutes` : "Off"}
+            </p>
+          </div>
+          <span style={{ color: "rgba(255,255,255,0.2)", fontSize: "1rem" }}>›</span>
+        </button>
+
+        {/* Report a Bug row */}
+        <button onClick={openBug} style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", paddingTop: "1rem", paddingBottom: "1rem", borderBottom: "1px solid rgba(255,255,255,0.06)", background: "none", border: "none", borderBottom: "1px solid rgba(255,255,255,0.06)", cursor: "pointer", WebkitTapHighlightColor: "transparent" }}>
+          <div>
+            <p style={{ color: "#fff", fontFamily: "Nunito, sans-serif", fontWeight: 700, fontSize: "0.88rem", textAlign: "left" }}>🐛 Report a Bug</p>
+            <p style={{ color: "rgba(255,255,255,0.3)", fontFamily: "Nunito, sans-serif", fontSize: "0.72rem", marginTop: "0.1rem", textAlign: "left" }}>Send feedback to the developer</p>
+          </div>
+          <span style={{ color: "rgba(255,255,255,0.2)", fontSize: "1rem" }}>›</span>
+        </button>
+
+        <button onClick={onLogout} style={{ marginTop: "2rem", width: "100%", padding: "0.85rem", borderRadius: "0.85rem", background: "rgba(255,60,60,0.1)", border: "1px solid rgba(255,60,60,0.25)", color: "#ff6b6b", fontFamily: "Nunito, sans-serif", fontWeight: 800, fontSize: "0.85rem", cursor: "pointer" }}>
+          Exit Profile
+        </button>
       </div>
 
-      {/* Check-in timer row */}
-      <button
-        onClick={onTimerClick}
-        style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "1rem 0", borderBottom: "1px solid rgba(255,255,255,0.06)", background: "none", border: "none", cursor: "pointer", borderBottom: "1px solid rgba(255,255,255,0.06)", paddingBottom: "1rem" }}
-      >
-        <div>
-          <p style={{ color: "#fff", fontFamily: "Nunito, sans-serif", fontWeight: 700, fontSize: "0.88rem", textAlign: "left" }}>⏰ Check-in Reminder</p>
-          <p style={{ color: "rgba(255,215,0,0.7)", fontFamily: "Nunito, sans-serif", fontSize: "0.72rem", marginTop: "0.1rem", textAlign: "left" }}>
-            {intervalMins > 0 ? `Every ${intervalMins} minutes` : "Off"}
-          </p>
-        </div>
-        <span style={{ color: "rgba(255,255,255,0.2)", fontSize: "1rem" }}>›</span>
-      </button>
-
-      <button
-        onClick={onLogout}
-        style={{ marginTop: "2rem", width: "100%", padding: "0.85rem", borderRadius: "0.85rem", background: "rgba(255,60,60,0.1)", border: "1px solid rgba(255,60,60,0.25)", color: "#ff6b6b", fontFamily: "Nunito, sans-serif", fontWeight: 800, fontSize: "0.85rem", cursor: "pointer" }}
-      >
-        Exit Profile
-      </button>
-    </div>
+      {/* Bug report sheet */}
+      <AnimatePresence>
+        {bugOpen && (
+          <>
+            <motion.div key="backdrop" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              style={{ position: "fixed", inset: 0, zIndex: 60, background: "rgba(0,0,0,0.65)" }}
+              onClick={closeBug}
+            />
+            <motion.div key="sheet" initial={{ y: "100%" }} animate={{ y: 0 }} exit={{ y: "100%" }}
+              transition={{ type: "spring", damping: 28, stiffness: 300 }}
+              style={{ position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 61, borderRadius: "1.5rem 1.5rem 0 0", background: "#0d0d14", borderTop: "2px solid rgba(255,82,0,0.3)", paddingBottom: "env(safe-area-inset-bottom, 0px)" }}
+            >
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "1.2rem 1.5rem 0" }}>
+                <p style={{ color: "#fff", fontFamily: "Nunito, sans-serif", fontWeight: 800, fontSize: "0.95rem" }}>🐛 Report a Bug</p>
+                <button onClick={closeBug} style={{ background: "none", border: "none", color: "rgba(255,255,255,0.4)", cursor: "pointer" }}>
+                  <XIcon size={18} />
+                </button>
+              </div>
+              <div style={{ padding: "1.25rem 1.5rem 2rem", display: "flex", flexDirection: "column", gap: "1rem" }}>
+                <div style={{ display: "flex", gap: "0.5rem" }}>
+                  {["Bug", "Suggestion", "Other"].map((t) => (
+                    <button key={t} onClick={() => setBugType(t)} style={{ flex: 1, padding: "0.5rem", borderRadius: "0.6rem", fontFamily: "Nunito, sans-serif", fontWeight: 800, fontSize: "0.75rem", cursor: "pointer", background: bugType === t ? "#FF5200" : "rgba(255,255,255,0.06)", color: bugType === t ? "#fff" : "rgba(255,255,255,0.45)", border: `1px solid ${bugType === t ? "transparent" : "rgba(255,255,255,0.1)"}` }}>
+                      {t}
+                    </button>
+                  ))}
+                </div>
+                <textarea value={bugText} onChange={(e) => setBugText(e.target.value)} placeholder="What happened?" rows={4}
+                  style={{ width: "100%", boxSizing: "border-box", padding: "0.75rem", borderRadius: "0.75rem", background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", color: "#fff", fontFamily: "Nunito, sans-serif", fontSize: "0.85rem", resize: "none", outline: "none" }}
+                />
+                {bugStatus === "error" && <p style={{ color: "#f87171", fontSize: "0.75rem" }}>Failed to send — try again.</p>}
+                {bugStatus === "done" && <p style={{ color: "#4ade80", fontSize: "0.75rem" }}>✓ Feedback sent! Thanks!</p>}
+                <button onClick={handleBugSubmit} disabled={!bugText.trim() || bugStatus === "sending" || bugStatus === "done"}
+                  style={{ padding: "0.85rem", borderRadius: "0.85rem", fontFamily: "Nunito, sans-serif", fontWeight: 800, fontSize: "0.85rem", background: "#FF5200", color: "#fff", border: "none", cursor: "pointer", opacity: !bugText.trim() || bugStatus === "sending" ? 0.5 : 1 }}>
+                  {bugStatus === "sending" ? "Sending…" : "Send Feedback"}
+                </button>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+    </>
   );
 }
 
